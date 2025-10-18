@@ -17,6 +17,8 @@ export const config = {
     followUpTimeoutMs: parseInt(process.env.FOLLOW_UP_TIMEOUT_MS || '30000', 10),
     followUpMessageCount: parseInt(process.env.FOLLOW_UP_MESSAGE_COUNT || '3', 10),
     fetchUrls: process.env.FETCH_URLS !== 'false', // Default true
+    streamResponses: process.env.STREAM_RESPONSES !== 'false', // Default true - stream tokens like Claude UI
+    streamUpdateInterval: parseInt(process.env.STREAM_UPDATE_INTERVAL || '500', 10), // Update Discord message every 500ms
   },
 };
 
