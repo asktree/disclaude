@@ -1,0 +1,12 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pnpm install --frozen-lockfile && pnpm run build"
+
+[deploy]
+startCommand = "node dist/index.js"
+restartPolicyType = "always"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+
+[variables]
+NODE_ENV = "production"

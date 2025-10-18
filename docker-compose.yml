@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./logs:/app/logs # Optional: for persistent logs
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M

@@ -1,0 +1,24 @@
+services:
+  - type: worker
+    name: disclaude-bot
+    runtime: node
+    repo: https://github.com/YOUR_USERNAME/disclaude # Update with your repo
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_BOT_TOKEN
+        sync: false # Set in Render dashboard
+      - key: DISCORD_CLIENT_ID
+        sync: false # Set in Render dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false # Set in Render dashboard
+      - key: CLAUDE_MODEL
+        value: claude-3-5-sonnet-20241022
+      - key: MAX_CONTEXT_MESSAGES
+        value: 20
+      - key: FOLLOW_UP_TIMEOUT_MS
+        value: 30000
+      - key: FOLLOW_UP_MESSAGE_COUNT
+        value: 3
