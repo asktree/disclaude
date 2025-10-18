@@ -12,7 +12,7 @@ export class ContextManager {
 
   async getMessageContext(
     channel: TextChannel | DMChannel | NewsChannel,
-    limit: number = config.bot.maxContextMessages
+    limit: number = config.bot.maxContextMessages // Now defaults to 100
   ): Promise<Collection<string, Message>> {
     try {
       const messages = await channel.messages.fetch({ limit });

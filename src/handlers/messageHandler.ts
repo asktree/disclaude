@@ -2,17 +2,24 @@ import { Message, TextChannel, DMChannel, NewsChannel } from 'discord.js';
 import { ClaudeService } from '../services/claude';
 import { ContextManager } from '../services/contextManager';
 import { RepoReader } from '../services/repoReader';
+import { UrlFetcher } from '../services/urlFetcher';
+import { TokenCounter } from '../utils/tokenCounter';
+import { config } from '../config';
 
 export class MessageHandler {
   private claudeService: ClaudeService;
   private contextManager: ContextManager;
   private repoReader: RepoReader;
+  private urlFetcher: UrlFetcher;
+  private tokenCounter: TokenCounter;
   private botId: string;
 
   constructor(botId: string) {
     this.claudeService = new ClaudeService();
     this.contextManager = new ContextManager();
     this.repoReader = new RepoReader();
+    this.urlFetcher = new UrlFetcher();
+    this.tokenCounter = new TokenCounter();
     this.botId = botId;
   }
 
@@ -47,10 +54,44 @@ export class MessageHandler {
       const contextMessages = await this.contextManager.getMessageContext(channel);
 
       // Format messages for Claude
-      const formattedMessages = this.claudeService.formatDiscordMessages(
+      let formattedMessages = this.claudeService.formatDiscordMessages(
         Array.from(contextMessages.values()),
         this.botId
       );
+
+      // Apply token-based context trimming
+      const initialTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
+      console.log(`📊 Initial context: ${formattedMessages.length} messages, ${initialTokenCount} tokens`);
+
+      if (initialTokenCount > config.bot.maxContextTokens) {
+        formattedMessages = this.tokenCounter.trimMessagesToTokenLimit(
+          formattedMessages,
+          config.bot.maxContextTokens,
+          10 // Preserve at least the last 10 messages
+        );
+        const trimmedTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
+        console.log(`✂️ Trimmed to ${formattedMessages.length} messages, ${trimmedTokenCount} tokens`);
+      }
+
+      // Extract and fetch URLs if enabled
+      let urlContext = '';
+      if (config.bot.fetchUrls) {
+        const allText = formattedMessages.map(m => m.content).join(' ');
+        const urls = this.urlFetcher.extractUrls(allText);
+
+        if (urls.length > 0) {
+          console.log(`🔗 Found ${urls.length} URLs in messages`);
+          const urlContents = await this.urlFetcher.fetchAllUrls(urls);
+
+          if (urlContents.length > 0) {
+            urlContext = '\n\nContent from URLs mentioned in the conversation:\n\n';
+            for (const urlContent of urlContents) {
+              urlContext += `\n--- ${urlContent.url} ---\n${urlContent.content}\n---\n`;
+            }
+            console.log(`📑 Fetched content from ${urlContents.length} URLs`);
+          }
+        }
+      }
 
       // Two-pass system: First ask Claude if it needs source code
       let repoContext = '';
@@ -93,7 +134,8 @@ If you decide not to respond, simply say "NO_RESPONSE".
 Otherwise, provide a helpful response.
         `;
 
-        const response = await this.claudeService.generateResponse(formattedMessages, shouldRespondPrompt, repoContext);
+        const fullContext = repoContext + urlContext;
+        const response = await this.claudeService.generateResponse(formattedMessages, shouldRespondPrompt, fullContext);
 
         if (response === "NO_RESPONSE" || response.includes("NO_RESPONSE")) {
           return;
@@ -106,7 +148,8 @@ Otherwise, provide a helpful response.
         await this.sendResponse(message, response);
       } else {
         // Direct mention - always respond
-        const response = await this.claudeService.generateResponse(formattedMessages, undefined, repoContext);
+        const fullContext = repoContext + urlContext;
+        const response = await this.claudeService.generateResponse(formattedMessages, undefined, fullContext);
         await this.sendResponse(message, response);
       }
     } catch (error) {
@@ -123,7 +166,9 @@ Otherwise, provide a helpful response.
       // Split long responses
       const chunks = this.splitMessage(response, 2000);
       for (const chunk of chunks) {
-        await message.channel.send(chunk);
+        if ('send' in message.channel) {
+          await message.channel.send(chunk);
+        }
       }
     }
   }
