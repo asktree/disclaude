@@ -20,7 +20,7 @@ export class TokenCounter {
     }
   }
 
-  countMessageTokens(messages: Array<{ role: string; content: string }>): number {
+  countMessageTokens(messages: Array<{ role: string; content: string | any[] }>): number {
     let totalTokens = 0;
 
     for (const message of messages) {
@@ -31,17 +31,30 @@ export class TokenCounter {
       totalTokens += this.countTokens(message.role);
 
       // Count content tokens
-      totalTokens += this.countTokens(message.content);
+      if (typeof message.content === 'string') {
+        totalTokens += this.countTokens(message.content);
+      } else if (Array.isArray(message.content)) {
+        // Handle multimodal content
+        for (const block of message.content) {
+          if (block.type === 'text') {
+            totalTokens += this.countTokens(block.text || '');
+          } else if (block.type === 'image') {
+            // Images typically consume ~1000-2000 tokens depending on size
+            // Use a conservative estimate
+            totalTokens += 1500;
+          }
+        }
+      }
     }
 
     return totalTokens;
   }
 
   trimMessagesToTokenLimit(
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | any[] }>,
     maxTokens: number,
     preserveLatest: number = 5
-  ): Array<{ role: string; content: string }> {
+  ): Array<{ role: string; content: string | any[] }> {
     if (messages.length <= preserveLatest) {
       return messages;
     }
@@ -51,11 +64,11 @@ export class TokenCounter {
     const olderMessages = messages.slice(0, -preserveLatest);
 
     let currentTokens = this.countMessageTokens(latestMessages);
-    const trimmedMessages: Array<{ role: string; content: string }> = [];
+    const trimmedMessages: Array<{ role: string; content: string | any[] }> = [];
 
     // Add older messages from newest to oldest until we hit the limit
     for (let i = olderMessages.length - 1; i >= 0; i--) {
-      const messageTokens = this.countTokens(olderMessages[i].content) + 10; // Include overhead
+      const messageTokens = this.countMessageTokens([olderMessages[i]]); // Use the proper counting method
 
       if (currentTokens + messageTokens <= maxTokens) {
         trimmedMessages.unshift(olderMessages[i]);

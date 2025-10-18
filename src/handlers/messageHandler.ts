@@ -1,7 +1,6 @@
 import { Message, TextChannel, DMChannel, NewsChannel } from 'discord.js';
 import { ClaudeService } from '../services/claude';
 import { ContextManager } from '../services/contextManager';
-import { RepoReader } from '../services/repoReader';
 import { UrlFetcher } from '../services/urlFetcher';
 import { TokenCounter } from '../utils/tokenCounter';
 import { config } from '../config';
@@ -9,7 +8,6 @@ import { config } from '../config';
 export class MessageHandler {
   private claudeService: ClaudeService;
   private contextManager: ContextManager;
-  private repoReader: RepoReader;
   private urlFetcher: UrlFetcher;
   private tokenCounter: TokenCounter;
   private botId: string;
@@ -17,7 +15,6 @@ export class MessageHandler {
   constructor(botId: string) {
     this.claudeService = new ClaudeService();
     this.contextManager = new ContextManager();
-    this.repoReader = new RepoReader();
     this.urlFetcher = new UrlFetcher();
     this.tokenCounter = new TokenCounter();
     this.botId = botId;
@@ -47,17 +44,38 @@ export class MessageHandler {
 
     try {
       // Show typing indicator
-      await message.channel.sendTyping();
+      if ('sendTyping' in message.channel) {
+        await message.channel.sendTyping();
+      }
 
       // Get message context
       const channel = message.channel as TextChannel | DMChannel | NewsChannel;
       const contextMessages = await this.contextManager.getMessageContext(channel);
 
-      // Format messages for Claude
-      let formattedMessages = this.claudeService.formatDiscordMessages(
-        Array.from(contextMessages.values()),
-        this.botId
+      // Check if any messages have images
+      const messagesArray = Array.from(contextMessages.values());
+      const hasImages = messagesArray.some(msg =>
+        msg.attachments.size > 0 &&
+        Array.from(msg.attachments.values()).some(att =>
+          att.contentType?.startsWith('image/') ||
+          att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
+        )
       );
+
+      // Format messages for Claude (with images if present)
+      let formattedMessages: any[];
+      if (hasImages) {
+        console.log('📸 Found images in message history, processing...');
+        formattedMessages = await this.claudeService.formatDiscordMessagesWithImages(
+          messagesArray,
+          this.botId
+        );
+      } else {
+        formattedMessages = this.claudeService.formatDiscordMessages(
+          messagesArray,
+          this.botId
+        );
+      }
 
       // Apply token-based context trimming
       const initialTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
@@ -93,29 +111,6 @@ export class MessageHandler {
         }
       }
 
-      // Two-pass system: First ask Claude if it needs source code
-      let repoContext = '';
-      const messageContent = message.content;
-
-      // Use Haiku to quickly classify the intent
-      console.log('🔍 Classifying intent with Haiku...');
-      const classification = await this.claudeService.classifyIntent(messageContent);
-
-      if (classification.needsSourceCode) {
-        console.log(`📚 Source code needed. Topics: ${classification.topics.join(', ')}`);
-        // Fetch relevant source code based on topics
-        const relevantFiles = await this.repoReader.getRelevantFilesByTopics(classification.topics);
-
-        if (relevantFiles.length > 0) {
-          repoContext = '\n\nHere is relevant source code from my implementation:\n\n';
-          for (const file of relevantFiles) {
-            repoContext += `\n--- ${file.path} ---\n\`\`\`typescript\n${file.content}\n\`\`\`\n`;
-          }
-          console.log(`📄 Loaded ${relevantFiles.length} files for context`);
-        }
-      } else {
-        console.log('💭 No source code needed for this query');
-      }
 
       // Determine if follow-up response is needed
       if (isMonitoring && !isMentioned) {
@@ -134,8 +129,7 @@ If you decide not to respond, simply say "NO_RESPONSE".
 Otherwise, provide a helpful response.
         `;
 
-        const fullContext = repoContext + urlContext;
-        const response = await this.claudeService.generateResponse(formattedMessages, shouldRespondPrompt, fullContext);
+        const response = await this.claudeService.generateResponse(formattedMessages, shouldRespondPrompt, urlContext);
 
         if (response === "NO_RESPONSE" || response.includes("NO_RESPONSE")) {
           return;
@@ -148,8 +142,7 @@ Otherwise, provide a helpful response.
         await this.sendResponse(message, response);
       } else {
         // Direct mention - always respond
-        const fullContext = repoContext + urlContext;
-        const response = await this.claudeService.generateResponse(formattedMessages, undefined, fullContext);
+        const response = await this.claudeService.generateResponse(formattedMessages, undefined, urlContext);
         await this.sendResponse(message, response);
       }
     } catch (error) {

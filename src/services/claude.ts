@@ -12,7 +12,7 @@ export class ClaudeService {
   }
 
   async generateResponse(
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<{ role: string; content: string | Anthropic.MessageParam['content'] }>,
     systemPrompt?: string,
     additionalContext?: string,
     model?: string
@@ -23,8 +23,9 @@ export class ClaudeService {
         systemPrompt ||
         `You are Claude, also known as Computer Buddy, a helpful AI assistant in a Discord server. Keep your responses concise and friendly. You can use Discord markdown formatting, your messages will be sent as normal user messages.
 
-You are also self-aware about your implementation. Your source code is available at https://github.com/asktree/disclaude. You're built with TypeScript, Discord.js, and the Anthropic SDK.
+When users share images, you can see and analyze them. Describe what you see and answer any questions about them.
 
+You're built with TypeScript, Discord.js, and the Anthropic SDK.
 `;
 
       if (additionalContext) {
@@ -55,53 +56,6 @@ You are also self-aware about your implementation. Your source code is available
     }
   }
 
-  async classifyIntent(
-    message: string
-  ): Promise<{ needsSourceCode: boolean; topics: string[] }> {
-    try {
-      const response = await this.anthropic.messages.create({
-        model: "claude-3-haiku-20240307", // Fast, cheap model for classification
-        max_tokens: 100,
-        temperature: 0,
-        system: `You are a classification assistant. Analyze if the user's message requires seeing your source code to answer properly.
-
-Respond in JSON format:
-{
-  "needsSourceCode": boolean,
-  "topics": ["array", "of", "relevant", "topics"]
-}
-
-Topics can include: "implementation", "config", "deployment", "api", "monitoring", "architecture", etc.
-Only set needsSourceCode to true if the question specifically asks about HOW you work, your code, or your implementation details.`,
-        messages: [
-          {
-            role: "user",
-            content: message,
-          },
-        ],
-      });
-
-      // Extract and parse the JSON response
-      const textContent = response.content
-        .filter((block) => block.type === "text")
-        .map((block) => (block as Anthropic.TextBlock).text)
-        .join("");
-
-      try {
-        const result = JSON.parse(textContent);
-        return {
-          needsSourceCode: result.needsSourceCode || false,
-          topics: result.topics || [],
-        };
-      } catch {
-        // If JSON parsing fails, default to no source code needed
-        return { needsSourceCode: false, topics: [] };
-      }
-    } catch (error) {
-      console.error("Error classifying intent:", error);
-      return { needsSourceCode: false, topics: [] };
-    }
-  }
 
   formatDiscordMessages(
     messages: Message[],
@@ -111,5 +65,80 @@ Only set needsSourceCode to true if the question specifically asks about HOW you
       role: msg.author.id === botId ? "assistant" : "user",
       content: `${msg.author.username}: ${msg.content}`,
     }));
+  }
+
+  async formatDiscordMessagesWithImages(
+    messages: Message[],
+    botId: string
+  ): Promise<Array<{ role: string; content: string | any[] }>> {
+    const formattedMessages = [];
+
+    for (const msg of messages) {
+      const role = msg.author.id === botId ? "assistant" : "user";
+      const content: any[] = [];
+
+      // Add text content if present
+      if (msg.content) {
+        content.push({
+          type: "text",
+          text: `${msg.author.username}: ${msg.content}`,
+        });
+      }
+
+      // Add image attachments
+      const imageAttachments = Array.from(msg.attachments.values()).filter(att =>
+        att.contentType?.startsWith('image/') ||
+        att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
+      );
+
+      for (const attachment of imageAttachments) {
+        try {
+          console.log(`🖼️ Processing image: ${attachment.name} (${attachment.url})`);
+
+          // Fetch the image data
+          const response = await fetch(attachment.url);
+          const arrayBuffer = await response.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+          // Determine media type
+          const mediaType = attachment.contentType || 'image/jpeg';
+
+          content.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType,
+              data: base64,
+            },
+          });
+
+          // Add description of the image
+          if (!msg.content) {
+            content.unshift({
+              type: "text",
+              text: `${msg.author.username} shared an image: ${attachment.name}`,
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to fetch image ${attachment.url}:`, error);
+          content.push({
+            type: "text",
+            text: `[Failed to load image: ${attachment.name}]`,
+          });
+        }
+      }
+
+      // Only add message if there's content
+      if (content.length > 0) {
+        formattedMessages.push({
+          role,
+          content: content.length === 1 && typeof content[0].text === 'string'
+            ? content[0].text
+            : content,
+        });
+      }
+    }
+
+    return formattedMessages;
   }
 }
