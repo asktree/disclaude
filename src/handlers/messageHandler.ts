@@ -1,15 +1,18 @@
 import { Message, TextChannel, DMChannel, NewsChannel } from 'discord.js';
 import { ClaudeService } from '../services/claude';
 import { ContextManager } from '../services/contextManager';
+import { RepoReader } from '../services/repoReader';
 
 export class MessageHandler {
   private claudeService: ClaudeService;
   private contextManager: ContextManager;
+  private repoReader: RepoReader;
   private botId: string;
 
   constructor(botId: string) {
     this.claudeService = new ClaudeService();
     this.contextManager = new ContextManager();
+    this.repoReader = new RepoReader();
     this.botId = botId;
   }
 
@@ -49,6 +52,30 @@ export class MessageHandler {
         this.botId
       );
 
+      // Two-pass system: First ask Claude if it needs source code
+      let repoContext = '';
+      const messageContent = message.content;
+
+      // Use Haiku to quickly classify the intent
+      console.log('🔍 Classifying intent with Haiku...');
+      const classification = await this.claudeService.classifyIntent(messageContent);
+
+      if (classification.needsSourceCode) {
+        console.log(`📚 Source code needed. Topics: ${classification.topics.join(', ')}`);
+        // Fetch relevant source code based on topics
+        const relevantFiles = await this.repoReader.getRelevantFilesByTopics(classification.topics);
+
+        if (relevantFiles.length > 0) {
+          repoContext = '\n\nHere is relevant source code from my implementation:\n\n';
+          for (const file of relevantFiles) {
+            repoContext += `\n--- ${file.path} ---\n\`\`\`typescript\n${file.content}\n\`\`\`\n`;
+          }
+          console.log(`📄 Loaded ${relevantFiles.length} files for context`);
+        }
+      } else {
+        console.log('💭 No source code needed for this query');
+      }
+
       // Determine if follow-up response is needed
       if (isMonitoring && !isMentioned) {
         // Add context about this being a follow-up
@@ -66,7 +93,7 @@ If you decide not to respond, simply say "NO_RESPONSE".
 Otherwise, provide a helpful response.
         `;
 
-        const response = await this.claudeService.generateResponse(formattedMessages, shouldRespondPrompt);
+        const response = await this.claudeService.generateResponse(formattedMessages, shouldRespondPrompt, repoContext);
 
         if (response === "NO_RESPONSE" || response.includes("NO_RESPONSE")) {
           return;
@@ -79,7 +106,7 @@ Otherwise, provide a helpful response.
         await this.sendResponse(message, response);
       } else {
         // Direct mention - always respond
-        const response = await this.claudeService.generateResponse(formattedMessages);
+        const response = await this.claudeService.generateResponse(formattedMessages, undefined, repoContext);
         await this.sendResponse(message, response);
       }
     } catch (error) {
@@ -139,4 +166,5 @@ Otherwise, provide a helpful response.
 
     return chunks;
   }
+
 }
