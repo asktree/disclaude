@@ -261,7 +261,7 @@ When users ask about current events, news, or information that might have change
             }
           }
 
-          textContent += (textContent ? "\n" : "") + blockText;
+          textContent += (textContent ? " " : "") + blockText;
         }
       }
 

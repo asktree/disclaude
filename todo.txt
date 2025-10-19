@@ -1,7 +1,0 @@
-My friends did not like the live streaming of text generation as claude thinks, so lets just remove that functionality entirely. 
-However, streaming tool use calls and results is still good. 
-
-
-we dont need to inject line breaks between text blocks. 
-
-when spreading replies across multiple messages, we need to make sure we don't split them mid sentence ideally. 

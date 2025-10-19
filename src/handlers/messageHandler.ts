@@ -410,35 +410,80 @@ Otherwise, provide a helpful response.
     const chunks: string[] = [];
     let currentChunk = '';
 
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    // Improved sentence splitting that handles more edge cases
+    // This regex matches sentences but keeps periods with abbreviations intact
+    const sentences = text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [text];
 
     for (const sentence of sentences) {
+      // If adding this sentence would exceed the limit
       if (currentChunk.length + sentence.length > maxLength) {
-        if (currentChunk) {
+        // Save current chunk if it has content
+        if (currentChunk.trim()) {
           chunks.push(currentChunk.trim());
           currentChunk = '';
         }
 
-        // If a single sentence is too long, split by words
+        // If a single sentence is too long, we need to split it
         if (sentence.length > maxLength) {
-          const words = sentence.split(' ');
-          for (const word of words) {
-            if (currentChunk.length + word.length + 1 > maxLength) {
-              chunks.push(currentChunk.trim());
-              currentChunk = word;
+          // Try to split at paragraph breaks first
+          const paragraphs = sentence.split(/\n\n+/);
+
+          for (const paragraph of paragraphs) {
+            if (paragraph.length > maxLength) {
+              // If paragraph is still too long, split by line breaks
+              const lines = paragraph.split(/\n/);
+
+              for (const line of lines) {
+                if (line.length > maxLength) {
+                  // Last resort: split by words at safe boundaries
+                  const words = line.split(/\s+/);
+
+                  for (const word of words) {
+                    if (currentChunk.length + word.length + 1 > maxLength) {
+                      if (currentChunk.trim()) {
+                        chunks.push(currentChunk.trim());
+                      }
+                      currentChunk = word;
+                    } else {
+                      currentChunk += (currentChunk ? ' ' : '') + word;
+                    }
+                  }
+                } else {
+                  // Line fits, add it
+                  if (currentChunk.length + line.length + 1 > maxLength) {
+                    if (currentChunk.trim()) {
+                      chunks.push(currentChunk.trim());
+                    }
+                    currentChunk = line;
+                  } else {
+                    currentChunk += (currentChunk ? '\n' : '') + line;
+                  }
+                }
+              }
             } else {
-              currentChunk += (currentChunk ? ' ' : '') + word;
+              // Paragraph fits, add it
+              if (currentChunk.length + paragraph.length + 2 > maxLength) {
+                if (currentChunk.trim()) {
+                  chunks.push(currentChunk.trim());
+                }
+                currentChunk = paragraph;
+              } else {
+                currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+              }
             }
           }
         } else {
+          // Sentence fits on its own
           currentChunk = sentence;
         }
       } else {
+        // Sentence fits with current chunk
         currentChunk += sentence;
       }
     }
 
-    if (currentChunk) {
+    // Don't forget the last chunk
+    if (currentChunk.trim()) {
       chunks.push(currentChunk.trim());
     }
 
