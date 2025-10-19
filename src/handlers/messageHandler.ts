@@ -225,16 +225,17 @@ Otherwise, provide a helpful response.
           // Note: web_search is handled automatically by Anthropic's API
           // We only handle custom tools here
           if (toolCall.name === 'read_source_code') {
+            let statusMessage: Message | undefined;
             try {
               const files = toolCall.input.files || [];
               console.log(`   📖 Reading source code: ${files.length === 0 ? 'repository structure' : files.join(', ')}`);
 
-              // Send status message to Discord
+              // Send initial status message to Discord
               if (originalMessage && 'send' in originalMessage.channel) {
                 if (files.length === 0) {
-                  await originalMessage.channel.send(`📂 *Getting repository structure...*`);
+                  statusMessage = await originalMessage.channel.send(`📂 *Getting repository structure...*`);
                 } else {
-                  await originalMessage.channel.send(`📖 *Reading ${files.length} source file${files.length !== 1 ? 's' : ''}...*`);
+                  statusMessage = await originalMessage.channel.send(`📖 *Reading ${files.length} source file${files.length !== 1 ? 's' : ''}...*`);
                 }
               }
 
@@ -253,12 +254,12 @@ Otherwise, provide a helpful response.
                 console.log(`   ✅ Loaded ${files.length} source file(s)`);
               }
 
-              // Send completion message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
+              // Edit the status message to show completion
+              if (statusMessage) {
                 if (files.length === 0) {
-                  await originalMessage.channel.send(`✅ *Repository structure loaded*`);
+                  await statusMessage.edit(`✅ *Repository structure loaded*`);
                 } else {
-                  await originalMessage.channel.send(`✅ *Loaded ${files.length} file${files.length !== 1 ? 's' : ''}*`);
+                  await statusMessage.edit(`✅ *Loaded ${files.length} file${files.length !== 1 ? 's' : ''}*`);
                 }
               }
 
@@ -269,8 +270,10 @@ Otherwise, provide a helpful response.
             } catch (error) {
               console.error('   ❌ Error reading source code:', error);
 
-              // Send error message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
+              // Edit status message to show error
+              if (statusMessage) {
+                await statusMessage.edit(`⚠️ *Failed to read source code: ${error}*`);
+              } else if (originalMessage && 'send' in originalMessage.channel) {
                 await originalMessage.channel.send(`⚠️ *Failed to read source code: ${error}*`);
               }
 
@@ -280,13 +283,14 @@ Otherwise, provide a helpful response.
               });
             }
           } else if (toolCall.name === 'fetch_url') {
+            let statusMessage: Message | undefined;
             try {
               const url = toolCall.input.url;
               console.log(`   🔗 Fetching URL: ${url}`);
 
-              // Send status message to Discord
+              // Send initial status message to Discord
               if (originalMessage && 'send' in originalMessage.channel) {
-                await originalMessage.channel.send(`🔗 *Fetching content from ${url}...*`);
+                statusMessage = await originalMessage.channel.send(`🔗 *Fetching content from ${url}...*`);
               }
 
               // Fetch the URL content
@@ -297,17 +301,17 @@ Otherwise, provide a helpful response.
                 urlContent = `URL: ${fetchedUrls[0].url}\nTitle: ${fetchedUrls[0].title || 'N/A'}\n\nContent:\n${fetchedUrls[0].content}`;
                 console.log(`   ✅ Successfully fetched content from ${url}`);
 
-                // Send completion message to Discord
-                if (originalMessage && 'send' in originalMessage.channel) {
-                  await originalMessage.channel.send(`✅ *Content fetched from ${url}*`);
+                // Edit the status message to show completion
+                if (statusMessage) {
+                  await statusMessage.edit(`✅ *Fetched content from ${url}*`);
                 }
               } else {
                 urlContent = `Failed to fetch content from ${url}`;
                 console.log(`   ❌ Failed to fetch content from ${url}`);
 
-                // Send error message to Discord
-                if (originalMessage && 'send' in originalMessage.channel) {
-                  await originalMessage.channel.send(`⚠️ *Failed to fetch content from ${url}*`);
+                // Edit status message to show failure
+                if (statusMessage) {
+                  await statusMessage.edit(`⚠️ *Failed to fetch content from ${url}*`);
                 }
               }
 
@@ -318,8 +322,10 @@ Otherwise, provide a helpful response.
             } catch (error) {
               console.error(`   ❌ Error fetching URL:`, error);
 
-              // Send error message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
+              // Edit status message to show error
+              if (statusMessage) {
+                await statusMessage.edit(`⚠️ *Failed to fetch URL: ${error}*`);
+              } else if (originalMessage && 'send' in originalMessage.channel) {
                 await originalMessage.channel.send(`⚠️ *Failed to fetch URL: ${error}*`);
               }
 
