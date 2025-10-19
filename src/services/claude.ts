@@ -323,7 +323,7 @@ Be concise. Most replies should be only a paragraph.
               }
 
               // Add citation link with <> to prevent embeds
-              citationLinks.push(`[${citationNum}](${citation.url})`);
+              citationLinks.push(`[${citationNum}](<${citation.url}>)`);
             }
 
             // Append all citations for this block grouped together
