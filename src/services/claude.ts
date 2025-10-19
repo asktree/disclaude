@@ -52,8 +52,6 @@ export class ClaudeService {
 
 Current date and time: ${dateStr} at ${timeStr}
 
-When users share images, you can see and analyze them. Describe what you see and answer any questions about them.
-
 You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source code is available at https://github.com/asktree/disclaude.
 
 When users ask about current events, news, or information that might have changed after your training, use the web_search tool to find current information.
@@ -95,7 +93,8 @@ When users ask about current events, news, or information that might have change
                     items: {
                       type: "string" as const,
                     },
-                    description: "Array of file paths to read (e.g., ['src/index.ts', 'src/services/claude.ts']). Leave empty to get repository structure.",
+                    description:
+                      "Array of file paths to read (e.g., ['src/index.ts', 'src/services/claude.ts']). Leave empty to get repository structure.",
                   },
                 },
                 required: [],
@@ -297,7 +296,8 @@ When users ask about current events, news, or information that might have change
                     items: {
                       type: "string" as const,
                     },
-                    description: "Array of file paths to read (e.g., ['src/index.ts', 'src/services/claude.ts']). Leave empty to get repository structure.",
+                    description:
+                      "Array of file paths to read (e.g., ['src/index.ts', 'src/services/claude.ts']). Leave empty to get repository structure.",
                   },
                 },
                 required: [],
