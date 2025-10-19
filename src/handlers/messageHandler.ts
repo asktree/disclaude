@@ -3,6 +3,7 @@ import { ClaudeService } from '../services/claude';
 import { ContextManager } from '../services/contextManager';
 import { UrlFetcher } from '../services/urlFetcher';
 import { WebSearchService } from '../services/webSearch';
+import { RepoReader } from '../services/repoReader';
 import { TokenCounter } from '../utils/tokenCounter';
 import { config } from '../config';
 
@@ -11,6 +12,7 @@ export class MessageHandler {
   private contextManager: ContextManager;
   private urlFetcher: UrlFetcher;
   private webSearchService: WebSearchService;
+  private repoReader: RepoReader;
   private tokenCounter: TokenCounter;
   private botId: string;
 
@@ -19,6 +21,7 @@ export class MessageHandler {
     this.contextManager = new ContextManager();
     this.urlFetcher = new UrlFetcher();
     this.webSearchService = new WebSearchService();
+    this.repoReader = new RepoReader();
     this.tokenCounter = new TokenCounter();
     this.botId = botId;
   }
@@ -347,6 +350,54 @@ Otherwise, provide a helpful response.
                 content: this.formatSearchResults(searchResults, toolCall.input.query)
               }]
             });
+          } else if (toolCall.name === 'read_source_code') {
+            // Show reading status
+            if ('send' in message.channel) {
+              const fileCount = toolCall.input.files?.length || 0;
+              if (fileCount === 0) {
+                await message.channel.send(`📂 *Getting repository structure...*`);
+              } else {
+                await message.channel.send(`📖 *Reading ${fileCount} source file${fileCount !== 1 ? 's' : ''}...*`);
+              }
+            }
+
+            // Execute the file reading
+            let sourceContent = '';
+            if (!toolCall.input.files || toolCall.input.files.length === 0) {
+              // Get repository structure
+              sourceContent = await this.repoReader.getRepoStructure();
+            } else {
+              // Read specific files
+              for (const filePath of toolCall.input.files) {
+                const content = await this.repoReader.getFileContent(filePath);
+                sourceContent += `\n--- ${filePath} ---\n\`\`\`typescript\n${content}\n\`\`\`\n`;
+              }
+            }
+
+            // Show completion message
+            if ('send' in message.channel) {
+              const fileCount = toolCall.input.files?.length || 0;
+              if (fileCount === 0) {
+                await message.channel.send(`✅ *Repository structure loaded*`);
+              } else {
+                await message.channel.send(`✅ *Loaded ${fileCount} file${fileCount !== 1 ? 's' : ''}*`);
+              }
+            }
+
+            // Add tool results to conversation
+            currentMessages.push({
+              role: 'assistant',
+              content: response.toolCalls
+            });
+
+            currentMessages.push({
+              role: 'user',
+              content: [{
+                type: 'tool_result' as const,
+                tool_use_id: toolCall.id,
+                content: sourceContent
+              }]
+            });
           }
         }
 
@@ -480,6 +531,61 @@ Otherwise, provide a helpful response.
               toolResults.push({
                 tool_use_id: toolCall.id,
                 content: `Error performing search: ${error}`
+              });
+            }
+          } else if (toolCall.name === 'read_source_code') {
+            try {
+              const files = toolCall.input.files || [];
+              console.log(`   📖 Reading source code: ${files.length === 0 ? 'repository structure' : files.join(', ')}`);
+
+              // Send status message to Discord
+              if (originalMessage && 'send' in originalMessage.channel) {
+                if (files.length === 0) {
+                  await originalMessage.channel.send(`📂 *Getting repository structure...*`);
+                } else {
+                  await originalMessage.channel.send(`📖 *Reading ${files.length} source file${files.length !== 1 ? 's' : ''}...*`);
+                }
+              }
+
+              // Execute the file reading
+              let sourceContent = '';
+              if (files.length === 0) {
+                // Get repository structure
+                sourceContent = await this.repoReader.getRepoStructure();
+                console.log(`   ✅ Loaded repository structure`);
+              } else {
+                // Read specific files
+                for (const filePath of files) {
+                  const content = await this.repoReader.getFileContent(filePath);
+                  sourceContent += `\n--- ${filePath} ---\n\`\`\`typescript\n${content}\n\`\`\`\n`;
+                }
+                console.log(`   ✅ Loaded ${files.length} source file(s)`);
+              }
+
+              // Send completion message to Discord
+              if (originalMessage && 'send' in originalMessage.channel) {
+                if (files.length === 0) {
+                  await originalMessage.channel.send(`✅ *Repository structure loaded*`);
+                } else {
+                  await originalMessage.channel.send(`✅ *Loaded ${files.length} file${files.length !== 1 ? 's' : ''}*`);
+                }
+              }
+
+              toolResults.push({
+                tool_use_id: toolCall.id,
+                content: sourceContent
+              });
+            } catch (error) {
+              console.error('   ❌ Error reading source code:', error);
+
+              // Send error message to Discord
+              if (originalMessage && 'send' in originalMessage.channel) {
+                await originalMessage.channel.send(`⚠️ *Failed to read source code: ${error}*`);
+              }
+
+              toolResults.push({
+                tool_use_id: toolCall.id,
+                content: `Error reading source code: ${error}`
               });
             }
           }

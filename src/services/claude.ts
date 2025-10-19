@@ -83,6 +83,24 @@ When users ask about current events, news, or information that might have change
                 required: ["query"],
               },
             },
+            {
+              name: "read_source_code",
+              description:
+                "Read your own source code files from the GitHub repository. Use this when users ask about how you work, your implementation, configuration, or any technical details about your code.",
+              input_schema: {
+                type: "object" as const,
+                properties: {
+                  files: {
+                    type: "array" as const,
+                    items: {
+                      type: "string" as const,
+                    },
+                    description: "Array of file paths to read (e.g., ['src/index.ts', 'src/services/claude.ts']). Leave empty to get repository structure.",
+                  },
+                },
+                required: [],
+              },
+            },
           ]
         : undefined;
 
@@ -265,6 +283,24 @@ When users ask about current events, news, or information that might have change
                   },
                 },
                 required: ["query"],
+              },
+            },
+            {
+              name: "read_source_code",
+              description:
+                "Read your own source code files from the GitHub repository. Use this when users ask about how you work, your implementation, configuration, or any technical details about your code.",
+              input_schema: {
+                type: "object" as const,
+                properties: {
+                  files: {
+                    type: "array" as const,
+                    items: {
+                      type: "string" as const,
+                    },
+                    description: "Array of file paths to read (e.g., ['src/index.ts', 'src/services/claude.ts']). Leave empty to get repository structure.",
+                  },
+                },
+                required: [],
               },
             },
           ]
