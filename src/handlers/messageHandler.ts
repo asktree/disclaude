@@ -2,7 +2,6 @@ import { Message, TextChannel, DMChannel, NewsChannel } from 'discord.js';
 import { ClaudeService } from '../services/claude';
 import { ContextManager } from '../services/contextManager';
 import { UrlFetcher } from '../services/urlFetcher';
-import { WebSearchService } from '../services/webSearch';
 import { RepoReader } from '../services/repoReader';
 import { TokenCounter } from '../utils/tokenCounter';
 import { config } from '../config';
@@ -11,7 +10,6 @@ export class MessageHandler {
   private claudeService: ClaudeService;
   private contextManager: ContextManager;
   private urlFetcher: UrlFetcher;
-  private webSearchService: WebSearchService;
   private repoReader: RepoReader;
   private tokenCounter: TokenCounter;
   private botId: string;
@@ -20,7 +18,6 @@ export class MessageHandler {
     this.claudeService = new ClaudeService();
     this.contextManager = new ContextManager();
     this.urlFetcher = new UrlFetcher();
-    this.webSearchService = new WebSearchService();
     this.repoReader = new RepoReader();
     this.tokenCounter = new TokenCounter();
     this.botId = botId;
@@ -309,48 +306,10 @@ Otherwise, provide a helpful response.
         await updateMessage(true);
 
         // Send tool execution messages
+        // Note: web_search is handled automatically by Anthropic's API
+        // We only need to handle our custom tools
         for (const toolCall of response.toolCalls) {
-          if (toolCall.name === 'web_search') {
-            // Show searching status
-            if ('send' in message.channel) {
-              await message.channel.send(`🔍 *Searching for: "${toolCall.input.query}"...*`);
-            }
-
-            // Execute the search
-            const searchResults = await this.webSearchService.search(toolCall.input.query, 5);
-
-            // Show results with titles
-            if ('send' in message.channel) {
-              if (searchResults.length > 0) {
-                let resultMessage = `📊 **Found ${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}:**\n`;
-                searchResults.forEach((result, index) => {
-                  // Truncate title if too long
-                  const title = result.title.length > 80
-                    ? result.title.substring(0, 77) + '...'
-                    : result.title;
-                  resultMessage += `${index + 1}. ${title}\n`;
-                });
-                await message.channel.send(resultMessage);
-              } else {
-                await message.channel.send(`❌ *No results found*`);
-              }
-            }
-
-            // Add tool results to conversation
-            currentMessages.push({
-              role: 'assistant',
-              content: response.toolCalls
-            });
-
-            currentMessages.push({
-              role: 'user',
-              content: [{
-                type: 'tool_result' as const,
-                tool_use_id: toolCall.id,
-                content: this.formatSearchResults(searchResults, toolCall.input.query)
-              }]
-            });
-          } else if (toolCall.name === 'read_source_code') {
+          if (toolCall.name === 'read_source_code') {
             // Show reading status
             if ('send' in message.channel) {
               const fileCount = toolCall.input.files?.length || 0;
@@ -428,18 +387,6 @@ Otherwise, provide a helpful response.
     await updateMessage(true); // Final update to remove indicator
   }
 
-  private formatSearchResults(results: any[], query: string): string {
-    let resultsText = `Search results for "${query}":\n\n`;
-    for (const result of results) {
-      resultsText += `**${result.title}**\n`;
-      resultsText += `${result.snippet}\n`;
-      if (result.url) {
-        resultsText += `URL: ${result.url}\n`;
-      }
-      resultsText += `\n`;
-    }
-    return resultsText;
-  }
 
   private async handleToolExecution(
     response: string | { needsTools: true; toolCalls: any[] },
@@ -474,66 +421,9 @@ Otherwise, provide a helpful response.
           console.log(`\n🔧 Tool Call: ${toolCall.name}`);
           console.log(`   Input: ${JSON.stringify(toolCall.input, null, 2)}`);
 
-          if (toolCall.name === 'web_search') {
-            try {
-              const searchQuery = toolCall.input.query;
-              console.log(`   🔍 Executing search for: "${searchQuery}"`);
-
-              // Send thinking message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
-                await originalMessage.channel.send(`🔍 *Searching for: "${searchQuery}"...*`);
-              }
-
-              const searchResults = await this.webSearchService.search(searchQuery, 5);
-
-              // Format search results for Claude
-              let resultsText = `Search results for "${searchQuery}":\n\n`;
-              for (const result of searchResults) {
-                resultsText += `**${result.title}**\n`;
-                resultsText += `${result.snippet}\n`;
-                if (result.url) {
-                  resultsText += `URL: ${result.url}\n`;
-                }
-                resultsText += `\n`;
-              }
-
-              console.log(`   ✅ Found ${searchResults.length} search results`);
-
-              // Send results with titles to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
-                if (searchResults.length > 0) {
-                  let resultMessage = `📊 **Found ${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}:**\n`;
-                  searchResults.forEach((result, index) => {
-                    // Truncate title if too long
-                    const title = result.title.length > 80
-                      ? result.title.substring(0, 77) + '...'
-                      : result.title;
-                    resultMessage += `${index + 1}. ${title}\n`;
-                  });
-                  await originalMessage.channel.send(resultMessage);
-                } else {
-                  await originalMessage.channel.send(`❌ *No results found*`);
-                }
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: resultsText
-              });
-            } catch (error) {
-              console.error('   ❌ Error executing web search:', error);
-
-              // Send error message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
-                await originalMessage.channel.send(`⚠️ *Search failed: ${error}*`);
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: `Error performing search: ${error}`
-              });
-            }
-          } else if (toolCall.name === 'read_source_code') {
+          // Note: web_search is handled automatically by Anthropic's API
+          // We only handle custom tools here
+          if (toolCall.name === 'read_source_code') {
             try {
               const files = toolCall.input.files || [];
               console.log(`   📖 Reading source code: ${files.length === 0 ? 'repository structure' : files.join(', ')}`);

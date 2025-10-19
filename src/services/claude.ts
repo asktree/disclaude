@@ -64,24 +64,16 @@ When users ask about current events, news, or information that might have change
         fullSystemPrompt += additionalContext;
       }
 
+      // Use Anthropic's native web search tool if enabled
       const tools = enableTools
         ? [
             {
-              name: "web_search",
-              description:
-                "Search the web for current information. Use this when users ask about recent events, news, or any information that might need to be up-to-date.",
-              input_schema: {
-                type: "object" as const,
-                properties: {
-                  query: {
-                    type: "string" as const,
-                    description: "The search query",
-                  },
-                },
-                required: ["query"],
-              },
+              type: "web_search_20250305" as const,
+              name: "web_search" as const,
+              max_uses: 5, // Allow up to 5 searches per request
             },
             {
+              type: "custom" as const,
               name: "read_source_code",
               description:
                 "Read your own source code files from the GitHub repository. Use this when users ask about how you work, your implementation, configuration, or any technical details about your code.",
@@ -267,24 +259,16 @@ When users ask about current events, news, or information that might have change
         fullSystemPrompt += additionalContext;
       }
 
+      // Use Anthropic's native web search tool if enabled
       const tools = enableTools
         ? [
             {
-              name: "web_search",
-              description:
-                "Search the web for current information. Use this when users ask about recent events, news, or any information that might need to be up-to-date.",
-              input_schema: {
-                type: "object" as const,
-                properties: {
-                  query: {
-                    type: "string" as const,
-                    description: "The search query",
-                  },
-                },
-                required: ["query"],
-              },
+              type: "web_search_20250305" as const,
+              name: "web_search" as const,
+              max_uses: 5, // Allow up to 5 searches per request
             },
             {
+              type: "custom" as const,
               name: "read_source_code",
               description:
                 "Read your own source code files from the GitHub repository. Use this when users ask about how you work, your implementation, configuration, or any technical details about your code.",
