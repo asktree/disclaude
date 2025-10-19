@@ -54,7 +54,7 @@ export class RepoReader {
         throw new Error(`GitHub API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any[];
       return data.map((item: any) => ({
         name: item.name,
         path: item.path,

@@ -1,4 +1,4 @@
-import { Message, TextChannel, DMChannel, NewsChannel } from "discord.js";
+import { Message, TextChannel, DMChannel, NewsChannel, Collection } from "discord.js";
 import { ClaudeService } from "../services/claude";
 import { ContextManager } from "../services/contextManager";
 import { UrlFetcher } from "../services/urlFetcher";
@@ -418,7 +418,9 @@ Otherwise, provide a helpful response.
               const targetChannelId = channel_id || originalMessage?.channelId;
 
               if (!targetChannelId) {
-                throw new Error("No channel ID provided and current channel not available");
+                throw new Error(
+                  "No channel ID provided and current channel not available"
+                );
               }
 
               console.log(
@@ -441,9 +443,13 @@ Otherwise, provide a helpful response.
               }
 
               // Fetch the channel
-              const targetChannel = await client.channels.fetch(targetChannelId);
+              const targetChannel = await client.channels.fetch(
+                targetChannelId
+              );
               if (!targetChannel || !("messages" in targetChannel)) {
-                throw new Error(`Channel ${targetChannelId} not found or not a text channel`);
+                throw new Error(
+                  `Channel ${targetChannelId} not found or not a text channel`
+                );
               }
 
               // Build fetch options for Discord API
@@ -453,7 +459,9 @@ Otherwise, provide a helpful response.
               if (around_message_id) fetchOptions.around = around_message_id;
 
               // Fetch messages
-              const messages = await (targetChannel as TextChannel).messages.fetch(fetchOptions);
+              const messages = await (
+                targetChannel as TextChannel
+              ).messages.fetch(fetchOptions) as unknown as Collection<string, Message>;
 
               // Convert to array and reverse to get chronological order
               const messageArray = Array.from(messages.values()).reverse() as Message[];
@@ -476,10 +484,11 @@ Otherwise, provide a helpful response.
 
               if (hasImages) {
                 console.log("   📸 Found images in fetched messages");
-                const formatted = await this.claudeService.formatDiscordMessagesWithImages(
-                  messageArray,
-                  this.botId
-                );
+                const formatted =
+                  await this.claudeService.formatDiscordMessagesWithImages(
+                    messageArray,
+                    this.botId
+                  );
                 // Convert formatted messages to text (already includes rich metadata)
                 for (const msg of formatted) {
                   if (typeof msg.content === "string") {
@@ -490,9 +499,9 @@ Otherwise, provide a helpful response.
                       .filter((c: any) => c.type === "text")
                       .map((c: any) => c.text)
                       .join("");
-                    const imageParts = msg.content
-                      .filter((c: any) => c.type === "image")
-                      .length;
+                    const imageParts = msg.content.filter(
+                      (c: any) => c.type === "image"
+                    ).length;
 
                     formattedContent += textParts;
                     if (imageParts > 0) {
@@ -611,8 +620,7 @@ Otherwise, provide a helpful response.
     message: Message,
     response: string
   ): Promise<void> {
-    // Discord has a 4000 character limit
-    const DISCORD_CHAR_LIMIT = 4000;
+    const DISCORD_CHAR_LIMIT = 2000;
 
     if (response.length <= DISCORD_CHAR_LIMIT) {
       // Response fits within limit, send as-is
@@ -658,7 +666,7 @@ Otherwise, provide a helpful response.
 
       // Search backwards from the limit for a space or newline
       for (let i = maxLength - 1; i > 0; i--) {
-        if (remaining[i] === ' ' || remaining[i] === '\n') {
+        if (remaining[i] === " " || remaining[i] === "\n") {
           splitAt = i + 1; // Include the space/newline in the current chunk
           break;
         }
@@ -667,7 +675,9 @@ Otherwise, provide a helpful response.
       // If we couldn't find any space/newline, force split at the limit
       // This handles edge cases like very long URLs or words
       if (splitAt === maxLength) {
-        console.log("⚠️ No space/newline found, forcing split at character limit");
+        console.log(
+          "⚠️ No space/newline found, forcing split at character limit"
+        );
       }
 
       // Add this chunk and continue with the rest

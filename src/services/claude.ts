@@ -435,6 +435,12 @@ Be concise. Most replies should be only a paragraph.
     botId: string,
     includeContent: boolean = true
   ): string {
+    // For assistant messages, just return the content without any metadata
+    if (msg.author.id === botId) {
+      return msg.content || "[No text content]";
+    }
+
+    // For user messages, include all metadata
     let content = "";
 
     // Add username and timestamp
