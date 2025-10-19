@@ -73,6 +73,7 @@ Be concise. Most replies should be only a paragraph.
               name: "web_search" as const,
               max_uses: 5, // Allow up to 5 searches per request
             },
+
             {
               type: "custom" as const,
               name: "read_source_code",
@@ -429,7 +430,6 @@ Be concise. Most replies should be only a paragraph.
         return true;
     }
   }
-
 
   formatDiscordMessages(
     messages: Message[],

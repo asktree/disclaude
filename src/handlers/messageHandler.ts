@@ -1,4 +1,10 @@
-import { Message, TextChannel, DMChannel, NewsChannel, Collection } from "discord.js";
+import {
+  Message,
+  TextChannel,
+  DMChannel,
+  NewsChannel,
+  Collection,
+} from "discord.js";
 import { ClaudeService } from "../services/claude";
 import { ContextManager } from "../services/contextManager";
 import { UrlFetcher } from "../services/urlFetcher";
@@ -143,7 +149,6 @@ export class MessageHandler {
             urlContext =
               "\n\nContent from the most recent URL in conversation:\n\n";
             urlContext += `\n--- ${urlContents[0].url} ---\n${urlContents[0].content}\n---\n`;
-            console.log(`📑 Fetched content from: ${urlContents[0].url}`);
           }
         } else {
           console.log("🔗 No URLs found in the last 5 messages");
@@ -357,20 +362,37 @@ Otherwise, provide a helpful response.
 
               // Fetch the URL content
               const fetchedUrls = await this.urlFetcher.fetchAllUrls([url]);
-              let urlContent = "";
+              let toolContent: any;
 
               if (fetchedUrls.length > 0 && fetchedUrls[0].content) {
-                urlContent = `URL: ${fetchedUrls[0].url}\nTitle: ${
-                  fetchedUrls[0].title || "N/A"
-                }\n\nContent:\n${fetchedUrls[0].content}`;
-                console.log(`   ✅ Successfully fetched content from ${url}`);
+                const fetched = fetchedUrls[0];
 
-                // Edit the status message to show completion
-                if (statusMessage) {
-                  await statusMessage.edit(`✅ *Fetched content from ${url}*`);
+                // Check if it's an image
+                if (fetched.isImage) {
+                  // For images, pass the content directly as it's already formatted for Claude
+                  toolContent = fetched.content;
+                  console.log(`   ✅ Successfully fetched image from ${url}`);
+
+                  // Edit the status message to show completion
+                  if (statusMessage) {
+                    await statusMessage.edit(`✅ *Fetched image from ${url}*`);
+                  }
+                } else {
+                  // For text content, format it as before
+                  toolContent = `URL: ${fetched.url}\nTitle: ${
+                    fetched.title || "N/A"
+                  }\n\nContent:\n${fetched.content}`;
+                  console.log(`   ✅ Successfully fetched content from ${url}`);
+
+                  // Edit the status message to show completion
+                  if (statusMessage) {
+                    await statusMessage.edit(
+                      `✅ *Fetched content from ${url}*`
+                    );
+                  }
                 }
               } else {
-                urlContent = `Failed to fetch content from ${url}`;
+                toolContent = `Failed to fetch content from ${url}`;
                 console.log(`   ❌ Failed to fetch content from ${url}`);
 
                 // Edit status message to show failure
@@ -383,7 +405,7 @@ Otherwise, provide a helpful response.
 
               toolResults.push({
                 tool_use_id: toolCall.id,
-                content: urlContent,
+                content: toolContent,
               });
             } catch (error) {
               console.error(`   ❌ Error fetching URL:`, error);
@@ -459,12 +481,17 @@ Otherwise, provide a helpful response.
               if (around_message_id) fetchOptions.around = around_message_id;
 
               // Fetch messages
-              const messages = await (
+              const messages = (await (
                 targetChannel as TextChannel
-              ).messages.fetch(fetchOptions) as unknown as Collection<string, Message>;
+              ).messages.fetch(fetchOptions)) as unknown as Collection<
+                string,
+                Message
+              >;
 
               // Convert to array and reverse to get chronological order
-              const messageArray = Array.from(messages.values()).reverse() as Message[];
+              const messageArray = Array.from(
+                messages.values()
+              ).reverse() as Message[];
 
               console.log(`   ✅ Fetched ${messageArray.length} messages`);
 
