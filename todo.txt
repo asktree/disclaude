@@ -1,0 +1,2 @@
+My friends did not like the live streaming of text generation as claude thinks, so lets just remove that functionality entirely. 
+However, streaming tool use calls and results is still good. 

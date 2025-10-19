@@ -124,6 +124,14 @@ When users ask about current events, news, or information that might have change
                 name: event.content_block.name,
                 input: "",
               };
+
+              // Log web search usage
+              if (event.content_block.name === "web_search") {
+                console.log("🔍 Web search initiated in stream");
+              }
+            } else if ((event.content_block as any).type === "web_search_tool_result") {
+              // Web search results are starting
+              console.log("🔍 Web search results received in stream");
             }
           } else if (event.type === "content_block_delta") {
             if (event.delta.type === "text_delta") {
@@ -137,18 +145,30 @@ When users ask about current events, news, or information that might have change
             }
           } else if (event.type === "content_block_stop") {
             if (currentToolCall) {
-              try {
-                currentToolCall.input = JSON.parse(currentToolCall.input);
-                toolCalls.push(currentToolCall);
-              } catch (e) {
-                console.error("Failed to parse tool input:", e);
+              // If it was web_search, just log it
+              if (currentToolCall.name === "web_search") {
+                try {
+                  const input = JSON.parse(currentToolCall.input);
+                  const searchQuery = input.query || "unknown query";
+                  console.log(`🔍 Web search query: "${searchQuery}"`);
+                } catch (e) {
+                  console.error("Failed to parse web search input:", e);
+                }
+              } else {
+                // Only add non-web_search tools to toolCalls
+                try {
+                  currentToolCall.input = JSON.parse(currentToolCall.input);
+                  toolCalls.push(currentToolCall);
+                } catch (e) {
+                  console.error("Failed to parse tool input:", e);
+                }
               }
               currentToolCall = null;
             }
           }
         }
 
-        // If we collected tool calls, return them
+        // If we collected custom tool calls, return them
         if (toolCalls.length > 0) {
           return { needsTools: true, toolCalls };
         }
@@ -297,32 +317,153 @@ When users ask about current events, news, or information that might have change
         tools,
         messages: messages.map((msg) => ({
           role:
-            msg.role === "user" ||
-            msg.role === "assistant" ||
-            msg.role === "tool"
+            msg.role === "user" || msg.role === "assistant"
               ? msg.role
               : "user",
           content: msg.content,
         })) as Anthropic.MessageParam[],
       });
 
-      // Check if Claude wants to use tools
+      // Log all content blocks for debugging
+      console.log(`📊 Response blocks: ${response.content.map(b => b.type).join(', ')}`);
+
+      // Log each text block individually
+      const textBlocks = response.content.filter((block) => block.type === "text");
+      if (textBlocks.length > 0) {
+        console.log(`📝 Found ${textBlocks.length} text blocks:`);
+        let totalCitations = 0;
+
+        textBlocks.forEach((block, index) => {
+          const textBlock = block as any;
+          console.log(`\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`);
+          console.log(`  Preview: "${textBlock.text.substring(0, 100)}${textBlock.text.length > 100 ? '...' : ''}"`);
+
+          // Check if this block has citations field
+          if (textBlock.citations && Array.isArray(textBlock.citations)) {
+            console.log(`  📎 Has ${textBlock.citations.length} citation(s):`);
+            textBlock.citations.forEach((citation: any, i: number) => {
+              console.log(`     ${i + 1}. "${citation.title || 'No title'}" - ${citation.url}`);
+            });
+            totalCitations += textBlock.citations.length;
+          }
+        });
+
+        console.log(`\n📊 Total citations found: ${totalCitations}`);
+      }
+
+      // Log web search usage if present
+      const webSearchResults = response.content.filter(
+        (block: any) => block.type === "web_search_tool_result"
+      );
+
+      if (webSearchResults.length > 0) {
+        let searchQuery = "";
+        let resultCount = 0;
+        const urls: string[] = [];
+
+        // Extract search query from tool use blocks
+        const toolUseBlocks = response.content.filter(
+          (block: any) => block.type === "server_tool_use" && block.name === "web_search"
+        );
+        if (toolUseBlocks.length > 0) {
+          searchQuery = (toolUseBlocks[0] as any).input?.query || "unknown query";
+        }
+
+        // Count results and collect URLs
+        for (const resultBlock of webSearchResults) {
+          const results = (resultBlock as any).content || [];
+          for (const result of results) {
+            if (result.type === "web_search_result") {
+              resultCount++;
+              if (result.url) {
+                urls.push(result.url);
+              }
+            }
+          }
+        }
+
+        console.log(`🔍 Web search occurred: "${searchQuery}" - found ${resultCount} results`);
+        console.log(`   URLs found: ${urls.slice(0, 3).join(', ')}${urls.length > 3 ? '...' : ''}`);
+
+        // Log first result structure for debugging
+        const firstResult = ((webSearchResults[0] as any).content || [])[0];
+        if (firstResult) {
+          console.log(`   Sample result structure:`, {
+            type: firstResult.type,
+            title: firstResult.title?.substring(0, 50),
+            url: firstResult.url,
+            hasSnippet: !!firstResult.snippet,
+            hasContent: !!firstResult.content,
+            hasEncryptedContent: !!firstResult.encrypted_content,
+            otherFields: Object.keys(firstResult).filter(k => !['type', 'title', 'url', 'snippet', 'content', 'encrypted_content'].includes(k))
+          });
+        }
+      }
+
+      // Check if Claude wants to use custom tools (not web_search which was already executed)
       const toolUseBlocks = response.content.filter(
         (block) => block.type === "tool_use"
       );
-      if (toolUseBlocks.length > 0 && enableTools) {
-        // Return tool calls for execution
+
+      // Filter out web_search since it's already been handled
+      const customToolBlocks = toolUseBlocks.filter(
+        (block: any) => block.name !== "web_search"
+      );
+
+      if (customToolBlocks.length > 0 && enableTools) {
+        // Return custom tool calls for execution
         return {
           needsTools: true,
-          toolCalls: toolUseBlocks,
+          toolCalls: customToolBlocks,
         };
       }
 
-      // Extract text content from the response
-      const textContent = response.content
-        .filter((block) => block.type === "text")
-        .map((block) => (block as Anthropic.TextBlock).text)
-        .join("\n");
+      // Extract text content with inline citations
+      let textContent = "";
+      const urlToCitationNum = new Map<string, number>(); // Maps URL to citation number
+      let citationCounter = 1;
+
+      for (const block of response.content) {
+        if (block.type === "text") {
+          const textBlock = block as any;
+          let blockText = textBlock.text;
+
+          // If this block has citations, append them inline
+          if (textBlock.citations && Array.isArray(textBlock.citations)) {
+            // First, deduplicate citations by URL within this block
+            const uniqueCitations = new Map<string, any>();
+            for (const citation of textBlock.citations) {
+              if (citation.url && !uniqueCitations.has(citation.url)) {
+                uniqueCitations.set(citation.url, citation);
+              }
+            }
+
+            // Build citation links
+            const citationLinks: string[] = [];
+            for (const citation of uniqueCitations.values()) {
+              let citationNum: number;
+
+              // Check if we've already seen this URL
+              if (urlToCitationNum.has(citation.url)) {
+                citationNum = urlToCitationNum.get(citation.url)!;
+              } else {
+                citationNum = citationCounter++;
+                urlToCitationNum.set(citation.url, citationNum);
+              }
+
+              // Add citation link with <> to prevent embeds
+              citationLinks.push(`[${citationNum}](<${citation.url}>)`);
+            }
+
+            // Append all citations for this block grouped together
+            if (citationLinks.length > 0) {
+              blockText += ` (${citationLinks.join(', ')})`;
+            }
+          }
+
+          textContent += (textContent ? "\n" : "") + blockText;
+        }
+      }
 
       return textContent || "I couldn't generate a response.";
     } catch (error: any) {
