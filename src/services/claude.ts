@@ -11,7 +11,6 @@ export class ClaudeService {
     });
   }
 
-
   async generateResponse(
     messages: Array<{
       role: string;
@@ -117,32 +116,44 @@ When users ask about current events, news, or information that might have change
         tools,
         messages: messages.map((msg) => ({
           role:
-            msg.role === "user" || msg.role === "assistant"
-              ? msg.role
-              : "user",
+            msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
           content: msg.content,
         })) as Anthropic.MessageParam[],
       });
 
       // Log all content blocks for debugging
-      console.log(`📊 Response blocks: ${response.content.map(b => b.type).join(', ')}`);
+      console.log(
+        `📊 Response blocks: ${response.content.map((b) => b.type).join(", ")}`
+      );
 
       // Log each text block individually
-      const textBlocks = response.content.filter((block) => block.type === "text");
+      const textBlocks = response.content.filter(
+        (block) => block.type === "text"
+      );
       if (textBlocks.length > 0) {
         console.log(`📝 Found ${textBlocks.length} text blocks:`);
         let totalCitations = 0;
 
         textBlocks.forEach((block, index) => {
           const textBlock = block as any;
-          console.log(`\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`);
-          console.log(`  Preview: "${textBlock.text.substring(0, 100)}${textBlock.text.length > 100 ? '...' : ''}"`);
+          console.log(
+            `\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`
+          );
+          console.log(
+            `  Preview: "${textBlock.text.substring(0, 100)}${
+              textBlock.text.length > 100 ? "..." : ""
+            }"`
+          );
 
           // Check if this block has citations field
           if (textBlock.citations && Array.isArray(textBlock.citations)) {
             console.log(`  📎 Has ${textBlock.citations.length} citation(s):`);
             textBlock.citations.forEach((citation: any, i: number) => {
-              console.log(`     ${i + 1}. "${citation.title || 'No title'}" - ${citation.url}`);
+              console.log(
+                `     ${i + 1}. "${citation.title || "No title"}" - ${
+                  citation.url
+                }`
+              );
             });
             totalCitations += textBlock.citations.length;
           }
@@ -163,10 +174,12 @@ When users ask about current events, news, or information that might have change
 
         // Extract search query from tool use blocks
         const toolUseBlocks = response.content.filter(
-          (block: any) => block.type === "server_tool_use" && block.name === "web_search"
+          (block: any) =>
+            block.type === "server_tool_use" && block.name === "web_search"
         );
         if (toolUseBlocks.length > 0) {
-          searchQuery = (toolUseBlocks[0] as any).input?.query || "unknown query";
+          searchQuery =
+            (toolUseBlocks[0] as any).input?.query || "unknown query";
         }
 
         // Count results and collect URLs
@@ -182,8 +195,14 @@ When users ask about current events, news, or information that might have change
           }
         }
 
-        console.log(`🔍 Web search occurred: "${searchQuery}" - found ${resultCount} results`);
-        console.log(`   URLs found: ${urls.slice(0, 3).join(', ')}${urls.length > 3 ? '...' : ''}`);
+        console.log(
+          `🔍 Web search occurred: "${searchQuery}" - found ${resultCount} results`
+        );
+        console.log(
+          `   URLs found: ${urls.slice(0, 3).join(", ")}${
+            urls.length > 3 ? "..." : ""
+          }`
+        );
 
         // Log first result structure for debugging
         const firstResult = ((webSearchResults[0] as any).content || [])[0];
@@ -195,7 +214,17 @@ When users ask about current events, news, or information that might have change
             hasSnippet: !!firstResult.snippet,
             hasContent: !!firstResult.content,
             hasEncryptedContent: !!firstResult.encrypted_content,
-            otherFields: Object.keys(firstResult).filter(k => !['type', 'title', 'url', 'snippet', 'content', 'encrypted_content'].includes(k))
+            otherFields: Object.keys(firstResult).filter(
+              (k) =>
+                ![
+                  "type",
+                  "title",
+                  "url",
+                  "snippet",
+                  "content",
+                  "encrypted_content",
+                ].includes(k)
+            ),
           });
         }
       }
@@ -252,12 +281,12 @@ When users ask about current events, news, or information that might have change
               }
 
               // Add citation link with <> to prevent embeds
-              citationLinks.push(`[${citationNum}](<${citation.url}>)`);
+              citationLinks.push(`[${citationNum}](${citation.url})`);
             }
 
             // Append all citations for this block grouped together
             if (citationLinks.length > 0) {
-              blockText += ` (${citationLinks.join(', ')})`;
+              blockText += ` (${citationLinks.join(", ")})`;
             }
           }
 

@@ -1,10 +1,10 @@
-import { Message, TextChannel, DMChannel, NewsChannel } from 'discord.js';
-import { ClaudeService } from '../services/claude';
-import { ContextManager } from '../services/contextManager';
-import { UrlFetcher } from '../services/urlFetcher';
-import { RepoReader } from '../services/repoReader';
-import { TokenCounter } from '../utils/tokenCounter';
-import { config } from '../config';
+import { Message, TextChannel, DMChannel, NewsChannel } from "discord.js";
+import { ClaudeService } from "../services/claude";
+import { ContextManager } from "../services/contextManager";
+import { UrlFetcher } from "../services/urlFetcher";
+import { RepoReader } from "../services/repoReader";
+import { TokenCounter } from "../utils/tokenCounter";
+import { config } from "../config";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
@@ -30,7 +30,9 @@ export class MessageHandler {
     }
 
     const isMentioned = message.mentions.has(this.botId);
-    const isMonitoring = this.contextManager.isMonitoringChannel(message.channelId);
+    const isMonitoring = this.contextManager.isMonitoringChannel(
+      message.channelId
+    );
 
     // Check if we should respond
     if (!isMentioned && !isMonitoring) {
@@ -41,38 +43,46 @@ export class MessageHandler {
     if (isMentioned) {
       this.contextManager.resetFollowUpCount(message.channelId);
       this.contextManager.startMonitoring(message.channelId);
-    } else if (isMonitoring && !this.contextManager.shouldRespond(message.channelId)) {
+    } else if (
+      isMonitoring &&
+      !this.contextManager.shouldRespond(message.channelId)
+    ) {
       return;
     }
 
     try {
       // Show typing indicator
-      if ('sendTyping' in message.channel) {
+      if ("sendTyping" in message.channel) {
         await message.channel.sendTyping();
       }
 
       // Get message context
       const channel = message.channel as TextChannel | DMChannel | NewsChannel;
-      const contextMessages = await this.contextManager.getMessageContext(channel);
+      const contextMessages = await this.contextManager.getMessageContext(
+        channel
+      );
 
       // Check if any messages have images
       const messagesArray = Array.from(contextMessages.values());
-      const hasImages = messagesArray.some(msg =>
-        msg.attachments.size > 0 &&
-        Array.from(msg.attachments.values()).some(att =>
-          att.contentType?.startsWith('image/') ||
-          att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
-        )
+      const hasImages = messagesArray.some(
+        (msg) =>
+          msg.attachments.size > 0 &&
+          Array.from(msg.attachments.values()).some(
+            (att) =>
+              att.contentType?.startsWith("image/") ||
+              att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
+          )
       );
 
       // Format messages for Claude (with images if present)
       let formattedMessages: any[];
       if (hasImages) {
-        console.log('📸 Found images in message history, processing...');
-        formattedMessages = await this.claudeService.formatDiscordMessagesWithImages(
-          messagesArray,
-          this.botId
-        );
+        console.log("📸 Found images in message history, processing...");
+        formattedMessages =
+          await this.claudeService.formatDiscordMessagesWithImages(
+            messagesArray,
+            this.botId
+          );
       } else {
         formattedMessages = this.claudeService.formatDiscordMessages(
           messagesArray,
@@ -81,8 +91,11 @@ export class MessageHandler {
       }
 
       // Apply token-based context trimming
-      const initialTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
-      console.log(`📊 Initial context: ${formattedMessages.length} messages, ${initialTokenCount} tokens`);
+      const initialTokenCount =
+        this.tokenCounter.countMessageTokens(formattedMessages);
+      console.log(
+        `📊 Initial context: ${formattedMessages.length} messages, ${initialTokenCount} tokens`
+      );
 
       if (initialTokenCount > config.bot.maxContextTokens) {
         formattedMessages = this.tokenCounter.trimMessagesToTokenLimit(
@@ -90,12 +103,15 @@ export class MessageHandler {
           config.bot.maxContextTokens,
           10 // Preserve at least the last 10 messages
         );
-        const trimmedTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
-        console.log(`✂️ Trimmed to ${formattedMessages.length} messages, ${trimmedTokenCount} tokens`);
+        const trimmedTokenCount =
+          this.tokenCounter.countMessageTokens(formattedMessages);
+        console.log(
+          `✂️ Trimmed to ${formattedMessages.length} messages, ${trimmedTokenCount} tokens`
+        );
       }
 
       // Extract and fetch the most recent URL from the last 5 messages if enabled
-      let urlContext = '';
+      let urlContext = "";
       if (config.bot.fetchUrls) {
         // Get only the last 5 messages
         const recentMessages = formattedMessages.slice(-5);
@@ -103,9 +119,10 @@ export class MessageHandler {
         // Find the most recent URL by checking messages from newest to oldest
         let mostRecentUrl: string | null = null;
         for (let i = recentMessages.length - 1; i >= 0; i--) {
-          const messageText = typeof recentMessages[i].content === 'string'
-            ? recentMessages[i].content
-            : JSON.stringify(recentMessages[i].content);
+          const messageText =
+            typeof recentMessages[i].content === "string"
+              ? recentMessages[i].content
+              : JSON.stringify(recentMessages[i].content);
 
           const urls = this.urlFetcher.extractUrls(messageText);
           if (urls.length > 0) {
@@ -115,19 +132,23 @@ export class MessageHandler {
         }
 
         if (mostRecentUrl) {
-          console.log(`🔗 Fetching most recent URL from last 5 messages: ${mostRecentUrl}`);
-          const urlContents = await this.urlFetcher.fetchAllUrls([mostRecentUrl]);
+          console.log(
+            `🔗 Fetching most recent URL from last 5 messages: ${mostRecentUrl}`
+          );
+          const urlContents = await this.urlFetcher.fetchAllUrls([
+            mostRecentUrl,
+          ]);
 
           if (urlContents.length > 0) {
-            urlContext = '\n\nContent from the most recent URL in conversation:\n\n';
+            urlContext =
+              "\n\nContent from the most recent URL in conversation:\n\n";
             urlContext += `\n--- ${urlContents[0].url} ---\n${urlContents[0].content}\n---\n`;
             console.log(`📑 Fetched content from: ${urlContents[0].url}`);
           }
         } else {
-          console.log('🔗 No URLs found in the last 5 messages');
+          console.log("🔗 No URLs found in the last 5 messages");
         }
       }
-
 
       // Determine if follow-up response is needed
       if (isMonitoring && !isMentioned) {
@@ -154,7 +175,10 @@ Otherwise, provide a helpful response.
           true // Enable tools
         );
 
-        if (typeof response === 'string' && (response === "NO_RESPONSE" || response.includes("NO_RESPONSE"))) {
+        if (
+          typeof response === "string" &&
+          (response === "NO_RESPONSE" || response.includes("NO_RESPONSE"))
+        ) {
           return;
         }
 
@@ -162,7 +186,13 @@ Otherwise, provide a helpful response.
         this.contextManager.incrementFollowUpCount(message.channelId);
 
         // Handle tool execution if needed
-        const finalResponse = await this.handleToolExecution(response, formattedMessages, undefined, urlContext, message);
+        const finalResponse = await this.handleToolExecution(
+          response,
+          formattedMessages,
+          undefined,
+          urlContext,
+          message
+        );
 
         // Send the response
         await this.sendResponse(message, finalResponse);
@@ -177,17 +207,23 @@ Otherwise, provide a helpful response.
         );
 
         // Handle tool execution if needed
-        const finalResponse = await this.handleToolExecution(response, formattedMessages, undefined, urlContext, message);
+        const finalResponse = await this.handleToolExecution(
+          response,
+          formattedMessages,
+          undefined,
+          urlContext,
+          message
+        );
 
         await this.sendResponse(message, finalResponse);
       }
     } catch (error) {
-      console.error('Error handling message:', error);
-      await message.reply('Sorry, I encountered an error processing your message.');
+      console.error("Error handling message:", error);
+      await message.reply(
+        "Sorry, I encountered an error processing your message."
+      );
     }
   }
-
-
 
   private async handleToolExecution(
     response: string | { needsTools: true; toolCalls: any[] },
@@ -203,11 +239,13 @@ Otherwise, provide a helpful response.
     // Keep executing tools until Claude returns a text response or we hit the max rounds
     while (roundCount < maxRounds) {
       // If it's a string response, we're done!
-      if (typeof currentResponse === 'string') {
+      if (typeof currentResponse === "string") {
         if (roundCount === 0) {
-          console.log('💬 Claude responded with text (no tools needed)');
+          console.log("💬 Claude responded with text (no tools needed)");
         } else {
-          console.log(`✨ Claude generated final response after ${roundCount} round(s) of tool use`);
+          console.log(
+            `✨ Claude generated final response after ${roundCount} round(s) of tool use`
+          );
         }
         return currentResponse;
       }
@@ -215,7 +253,9 @@ Otherwise, provide a helpful response.
       // If it needs tools, execute them
       if (currentResponse.needsTools) {
         roundCount++;
-        console.log(`\n🤖 [Round ${roundCount}] Claude wants to use ${currentResponse.toolCalls.length} tool(s)`);
+        console.log(
+          `\n🤖 [Round ${roundCount}] Claude wants to use ${currentResponse.toolCalls.length} tool(s)`
+        );
         const toolResults: any[] = [];
 
         for (const toolCall of currentResponse.toolCalls) {
@@ -224,23 +264,33 @@ Otherwise, provide a helpful response.
 
           // Note: web_search is handled automatically by Anthropic's API
           // We only handle custom tools here
-          if (toolCall.name === 'read_source_code') {
+          if (toolCall.name === "read_source_code") {
             let statusMessage: Message | undefined;
             try {
               const files = toolCall.input.files || [];
-              console.log(`   📖 Reading source code: ${files.length === 0 ? 'repository structure' : files.join(', ')}`);
+              console.log(
+                `   📖 Reading source code: ${
+                  files.length === 0 ? "repository structure" : files.join(", ")
+                }`
+              );
 
               // Send initial status message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
+              if (originalMessage && "send" in originalMessage.channel) {
                 if (files.length === 0) {
-                  statusMessage = await originalMessage.channel.send(`📂 *Getting repository structure...*`);
+                  statusMessage = await originalMessage.channel.send(
+                    `📂 *Getting repository structure...*`
+                  );
                 } else {
-                  statusMessage = await originalMessage.channel.send(`📖 *Reading ${files.length} source file${files.length !== 1 ? 's' : ''}...*`);
+                  statusMessage = await originalMessage.channel.send(
+                    `📖 *Reading ${files.length} source file${
+                      files.length !== 1 ? "s" : ""
+                    }...*`
+                  );
                 }
               }
 
               // Execute the file reading
-              let sourceContent = '';
+              let sourceContent = "";
               if (files.length === 0) {
                 // Get repository structure
                 sourceContent = await this.repoReader.getRepoStructure();
@@ -248,7 +298,9 @@ Otherwise, provide a helpful response.
               } else {
                 // Read specific files
                 for (const filePath of files) {
-                  const content = await this.repoReader.getFileContent(filePath);
+                  const content = await this.repoReader.getFileContent(
+                    filePath
+                  );
                   sourceContent += `\n--- ${filePath} ---\n\`\`\`typescript\n${content}\n\`\`\`\n`;
                 }
                 console.log(`   ✅ Loaded ${files.length} source file(s)`);
@@ -259,46 +311,58 @@ Otherwise, provide a helpful response.
                 if (files.length === 0) {
                   await statusMessage.edit(`✅ *Repository structure loaded*`);
                 } else {
-                  await statusMessage.edit(`✅ *Loaded ${files.length} file${files.length !== 1 ? 's' : ''}*`);
+                  await statusMessage.edit(
+                    `✅ *Loaded ${files.length} file${
+                      files.length !== 1 ? "s" : ""
+                    }*`
+                  );
                 }
               }
 
               toolResults.push({
                 tool_use_id: toolCall.id,
-                content: sourceContent
+                content: sourceContent,
               });
             } catch (error) {
-              console.error('   ❌ Error reading source code:', error);
+              console.error("   ❌ Error reading source code:", error);
 
               // Edit status message to show error
               if (statusMessage) {
-                await statusMessage.edit(`⚠️ *Failed to read source code: ${error}*`);
-              } else if (originalMessage && 'send' in originalMessage.channel) {
-                await originalMessage.channel.send(`⚠️ *Failed to read source code: ${error}*`);
+                await statusMessage.edit(
+                  `⚠️ *Failed to read source code: ${error}*`
+                );
+              } else if (originalMessage && "send" in originalMessage.channel) {
+                await originalMessage.channel.send(
+                  `⚠️ *Failed to read source code: ${error}*`
+                );
               }
 
               toolResults.push({
                 tool_use_id: toolCall.id,
-                content: `Error reading source code: ${error}`
+                content: `Error reading source code: ${error}`,
               });
             }
-          } else if (toolCall.name === 'fetch_url') {
+          } else if (toolCall.name === "fetch_url") {
             let statusMessage: Message | undefined;
             try {
               const url = toolCall.input.url;
               console.log(`   🔗 Fetching URL: ${url}`);
 
               // Send initial status message to Discord
-              if (originalMessage && 'send' in originalMessage.channel) {
-                statusMessage = await originalMessage.channel.send(`🔗 *Fetching content from ${url}...*`);
+              if (originalMessage && "send" in originalMessage.channel) {
+                statusMessage = await originalMessage.channel.send(
+                  `🔗 *Fetching content from ${url}...*`
+                );
               }
 
               // Fetch the URL content
               const fetchedUrls = await this.urlFetcher.fetchAllUrls([url]);
-              let urlContent = '';
+              let urlContent = "";
 
               if (fetchedUrls.length > 0 && fetchedUrls[0].content) {
-                urlContent = `URL: ${fetchedUrls[0].url}\nTitle: ${fetchedUrls[0].title || 'N/A'}\n\nContent:\n${fetchedUrls[0].content}`;
+                urlContent = `URL: ${fetchedUrls[0].url}\nTitle: ${
+                  fetchedUrls[0].title || "N/A"
+                }\n\nContent:\n${fetchedUrls[0].content}`;
                 console.log(`   ✅ Successfully fetched content from ${url}`);
 
                 // Edit the status message to show completion
@@ -311,13 +375,15 @@ Otherwise, provide a helpful response.
 
                 // Edit status message to show failure
                 if (statusMessage) {
-                  await statusMessage.edit(`⚠️ *Failed to fetch content from ${url}*`);
+                  await statusMessage.edit(
+                    `⚠️ *Failed to fetch content from ${url}*`
+                  );
                 }
               }
 
               toolResults.push({
                 tool_use_id: toolCall.id,
-                content: urlContent
+                content: urlContent,
               });
             } catch (error) {
               console.error(`   ❌ Error fetching URL:`, error);
@@ -325,13 +391,15 @@ Otherwise, provide a helpful response.
               // Edit status message to show error
               if (statusMessage) {
                 await statusMessage.edit(`⚠️ *Failed to fetch URL: ${error}*`);
-              } else if (originalMessage && 'send' in originalMessage.channel) {
-                await originalMessage.channel.send(`⚠️ *Failed to fetch URL: ${error}*`);
+              } else if (originalMessage && "send" in originalMessage.channel) {
+                await originalMessage.channel.send(
+                  `⚠️ *Failed to fetch URL: ${error}*`
+                );
               }
 
               toolResults.push({
                 tool_use_id: toolCall.id,
-                content: `Error fetching URL: ${error}`
+                content: `Error fetching URL: ${error}`,
               });
             }
           }
@@ -339,26 +407,28 @@ Otherwise, provide a helpful response.
 
         // Add Claude's response (with tool use) to the conversation
         formattedMessages.push({
-          role: 'assistant',
-          content: currentResponse.toolCalls
+          role: "assistant",
+          content: currentResponse.toolCalls,
         });
 
         // Add tool results to the conversation as user messages with tool_result blocks
-        const toolResultContent = toolResults.map(result => ({
-          type: 'tool_result' as const,
+        const toolResultContent = toolResults.map((result) => ({
+          type: "tool_result" as const,
           tool_use_id: result.tool_use_id,
-          content: result.content
+          content: result.content,
         }));
 
         formattedMessages.push({
-          role: 'user',
-          content: toolResultContent
+          role: "user",
+          content: toolResultContent,
         });
 
-        console.log(`\n🔄 [Round ${roundCount}] Sending tool results back to Claude...`);
+        console.log(
+          `\n🔄 [Round ${roundCount}] Sending tool results back to Claude...`
+        );
 
         // Send thinking message to Discord
-        if (originalMessage && 'send' in originalMessage.channel) {
+        if (originalMessage && "send" in originalMessage.channel) {
           await originalMessage.channel.send(`🤔 *Thinking...*`);
         }
 
@@ -372,12 +442,14 @@ Otherwise, provide a helpful response.
         );
       } else {
         // Unexpected format
-        return 'I encountered an unexpected response format.';
+        return "I encountered an unexpected response format.";
       }
     }
 
     // Hit max rounds
-    console.log(`⚠️ Reached maximum tool rounds (${maxRounds}), forcing final response...`);
+    console.log(
+      `⚠️ Reached maximum tool rounds (${maxRounds}), forcing final response...`
+    );
 
     // Force a final text response without tools
     const finalResponse = await this.claudeService.generateResponse(
@@ -388,19 +460,41 @@ Otherwise, provide a helpful response.
       false // Disable tools to force a text response
     );
 
-    return typeof finalResponse === 'string' ? finalResponse : 'I encountered an error after multiple tool uses.';
+    return typeof finalResponse === "string"
+      ? finalResponse
+      : "I encountered an error after multiple tool uses.";
   }
 
-  private async sendResponse(message: Message, response: string): Promise<void> {
-    // Discord has a 2000 character limit
-    if (response.length <= 2000) {
+  private async sendResponse(
+    message: Message,
+    response: string
+  ): Promise<void> {
+    // Discord has a 4000 character limit
+    const DISCORD_CHAR_LIMIT = 4000;
+
+    if (response.length <= DISCORD_CHAR_LIMIT) {
+      // Response fits within limit, send as-is
       await message.reply(response);
     } else {
-      // Split long responses
-      const chunks = this.splitMessage(response, 2000);
-      for (const chunk of chunks) {
-        if ('send' in message.channel) {
-          await message.channel.send(chunk);
+      // Split long messages into chunks
+      console.log(
+        `📝 Response is ${response.length} chars (exceeds ${DISCORD_CHAR_LIMIT} limit), splitting...`
+      );
+
+      // Log if response contains citations to help debug
+      if (response.includes("](<")) {
+        console.log("⚠️ Response contains citations - monitoring for issues");
+      }
+
+      const chunks = this.splitMessage(response, DISCORD_CHAR_LIMIT);
+
+      // Send first chunk as reply
+      await message.reply(chunks[0]);
+
+      // Send remaining chunks as follow-up messages
+      for (let i = 1; i < chunks.length; i++) {
+        if ("send" in message.channel) {
+          await message.channel.send(chunks[i]);
         }
       }
     }
@@ -408,86 +502,37 @@ Otherwise, provide a helpful response.
 
   private splitMessage(text: string, maxLength: number): string[] {
     const chunks: string[] = [];
-    let currentChunk = '';
+    let remaining = text;
 
-    // Improved sentence splitting that handles more edge cases
-    // This regex matches sentences but keeps periods with abbreviations intact
-    const sentences = text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [text];
-
-    for (const sentence of sentences) {
-      // If adding this sentence would exceed the limit
-      if (currentChunk.length + sentence.length > maxLength) {
-        // Save current chunk if it has content
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk.trim());
-          currentChunk = '';
-        }
-
-        // If a single sentence is too long, we need to split it
-        if (sentence.length > maxLength) {
-          // Try to split at paragraph breaks first
-          const paragraphs = sentence.split(/\n\n+/);
-
-          for (const paragraph of paragraphs) {
-            if (paragraph.length > maxLength) {
-              // If paragraph is still too long, split by line breaks
-              const lines = paragraph.split(/\n/);
-
-              for (const line of lines) {
-                if (line.length > maxLength) {
-                  // Last resort: split by words at safe boundaries
-                  const words = line.split(/\s+/);
-
-                  for (const word of words) {
-                    if (currentChunk.length + word.length + 1 > maxLength) {
-                      if (currentChunk.trim()) {
-                        chunks.push(currentChunk.trim());
-                      }
-                      currentChunk = word;
-                    } else {
-                      currentChunk += (currentChunk ? ' ' : '') + word;
-                    }
-                  }
-                } else {
-                  // Line fits, add it
-                  if (currentChunk.length + line.length + 1 > maxLength) {
-                    if (currentChunk.trim()) {
-                      chunks.push(currentChunk.trim());
-                    }
-                    currentChunk = line;
-                  } else {
-                    currentChunk += (currentChunk ? '\n' : '') + line;
-                  }
-                }
-              }
-            } else {
-              // Paragraph fits, add it
-              if (currentChunk.length + paragraph.length + 2 > maxLength) {
-                if (currentChunk.trim()) {
-                  chunks.push(currentChunk.trim());
-                }
-                currentChunk = paragraph;
-              } else {
-                currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
-              }
-            }
-          }
-        } else {
-          // Sentence fits on its own
-          currentChunk = sentence;
-        }
-      } else {
-        // Sentence fits with current chunk
-        currentChunk += sentence;
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        // Last chunk, add it all
+        chunks.push(remaining);
+        break;
       }
-    }
 
-    // Don't forget the last chunk
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
+      // Find the nearest space or newline before the limit
+      let splitAt = maxLength;
+
+      // Search backwards from the limit for a space or newline
+      for (let i = maxLength - 1; i > 0; i--) {
+        if (remaining[i] === ' ' || remaining[i] === '\n') {
+          splitAt = i + 1; // Include the space/newline in the current chunk
+          break;
+        }
+      }
+
+      // If we couldn't find any space/newline, force split at the limit
+      // This handles edge cases like very long URLs or words
+      if (splitAt === maxLength) {
+        console.log("⚠️ No space/newline found, forcing split at character limit");
+      }
+
+      // Add this chunk and continue with the rest
+      chunks.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt).trim(); // Trim leading whitespace from next chunk
     }
 
     return chunks;
   }
-
 }
