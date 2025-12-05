@@ -1,6 +1,6 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js';
-import { config } from './config';
-import { MessageHandler } from './handlers/messageHandler';
+import { Client, GatewayIntentBits, Events } from "discord.js";
+import { config } from "./config";
+import { MessageHandler } from "./handlers/messageHandler";
 
 class DisclaudeBot {
   private client: Client;
@@ -31,8 +31,8 @@ class DisclaudeBot {
 
       // Set bot presence
       readyClient.user.setPresence({
-        activities: [{ name: 'for @mentions', type: 3 }], // Type 3 = Watching
-        status: 'online',
+        activities: [{ name: "ping me for a reply 😃", type: 3 }], // Type 3 = Watching
+        status: "online",
       });
     });
 
@@ -43,22 +43,22 @@ class DisclaudeBot {
     });
 
     this.client.on(Events.Error, (error) => {
-      console.error('Discord client error:', error);
+      console.error("Discord client error:", error);
     });
 
     this.client.on(Events.Warn, (warning) => {
-      console.warn('Discord client warning:', warning);
+      console.warn("Discord client warning:", warning);
     });
 
     // Handle graceful shutdown
-    process.on('SIGINT', () => {
-      console.log('\n🛑 Shutting down gracefully...');
+    process.on("SIGINT", () => {
+      console.log("\n🛑 Shutting down gracefully...");
       this.client.destroy();
       process.exit(0);
     });
 
-    process.on('SIGTERM', () => {
-      console.log('\n🛑 Shutting down gracefully...');
+    process.on("SIGTERM", () => {
+      console.log("\n🛑 Shutting down gracefully...");
       this.client.destroy();
       process.exit(0);
     });
@@ -66,15 +66,17 @@ class DisclaudeBot {
 
   async start(): Promise<void> {
     try {
-      console.log('🚀 Starting Disclaude bot...');
+      console.log("🚀 Starting Disclaude bot...");
       console.log(`📝 Using Claude model: ${config.anthropic.model}`);
       console.log(`💬 Max context messages: ${config.bot.maxContextMessages}`);
       console.log(`⏱️  Follow-up timeout: ${config.bot.followUpTimeoutMs}ms`);
-      console.log(`🔄 Max follow-up messages: ${config.bot.followUpMessageCount}`);
+      console.log(
+        `🔄 Max follow-up messages: ${config.bot.followUpMessageCount}`
+      );
 
       await this.client.login(config.discord.token);
     } catch (error) {
-      console.error('Failed to start bot:', error);
+      console.error("Failed to start bot:", error);
       process.exit(1);
     }
   }
