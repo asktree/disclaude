@@ -231,13 +231,13 @@ Otherwise, provide a helpful response.
   }
 
   private async handleToolExecution(
-    response: string | { needsTools: true; toolCalls: any[] },
+    response: string | { needsTools: true; toolCalls: any[] } | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> },
     formattedMessages: any[],
     systemPrompt?: string,
     urlContext?: string,
     originalMessage?: Message,
     maxRounds: number = 5
-  ): Promise<string> {
+  ): Promise<string | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }> {
     let currentResponse = response;
     let roundCount = 0;
 
@@ -252,6 +252,12 @@ Otherwise, provide a helpful response.
             `✨ Claude generated final response after ${roundCount} round(s) of tool use`
           );
         }
+        return currentResponse;
+      }
+
+      // If it's a response with files, we're done!
+      if ('text' in currentResponse && 'files' in currentResponse) {
+        console.log(`📎 Claude generated response with ${currentResponse.files.length} file(s)`);
         return currentResponse;
       }
 
@@ -645,28 +651,52 @@ Otherwise, provide a helpful response.
 
   private async sendResponse(
     message: Message,
-    response: string
+    response: string | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }
   ): Promise<void> {
     const DISCORD_CHAR_LIMIT = 2000;
 
-    if (response.length <= DISCORD_CHAR_LIMIT) {
-      // Response fits within limit, send as-is
-      await message.reply(response);
+    // Extract text and files
+    let responseText: string;
+    let files: Array<{ name: string; content: string; mimeType?: string }> = [];
+
+    if (typeof response === 'string') {
+      responseText = response;
+    } else {
+      responseText = response.text;
+      files = response.files;
+    }
+
+    // Prepare Discord attachments from files
+    const attachments = files.map(file => ({
+      attachment: Buffer.from(file.content),
+      name: file.name,
+      description: `Generated file: ${file.name}`
+    }));
+
+    if (responseText.length <= DISCORD_CHAR_LIMIT) {
+      // Response fits within limit, send as-is with attachments
+      await message.reply({
+        content: responseText,
+        files: attachments
+      });
     } else {
       // Split long messages into chunks
       console.log(
-        `📝 Response is ${response.length} chars (exceeds ${DISCORD_CHAR_LIMIT} limit), splitting...`
+        `📝 Response is ${responseText.length} chars (exceeds ${DISCORD_CHAR_LIMIT} limit), splitting...`
       );
 
       // Log if response contains citations to help debug
-      if (response.includes("](<")) {
+      if (responseText.includes("](<")) {
         console.log("⚠️ Response contains citations - monitoring for issues");
       }
 
-      const chunks = this.splitMessage(response, DISCORD_CHAR_LIMIT);
+      const chunks = this.splitMessage(responseText, DISCORD_CHAR_LIMIT);
 
-      // Send first chunk as reply
-      await message.reply(chunks[0]);
+      // Send first chunk as reply with attachments (if any)
+      await message.reply({
+        content: chunks[0],
+        files: attachments
+      });
 
       // Send remaining chunks as follow-up messages
       for (let i = 1; i < chunks.length; i++) {

@@ -2,6 +2,30 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config";
 import { Message } from "discord.js";
 import { buildDiscordMessageRepresentation } from "../utils/messageFormatter";
+import { ToolUnion } from "@anthropic-ai/sdk/resources/messages";
+
+// Helper function to determine MIME type from filename
+function getMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'gif': 'image/gif',
+    'svg': 'image/svg+xml',
+    'pdf': 'application/pdf',
+    'json': 'application/json',
+    'csv': 'text/csv',
+    'txt': 'text/plain',
+    'html': 'text/html',
+    'xml': 'application/xml',
+    'py': 'text/x-python',
+    'js': 'text/javascript',
+    'ts': 'text/typescript',
+    'md': 'text/markdown',
+  };
+  return mimeTypes[ext || ''] || 'application/octet-stream';
+}
 
 export class ClaudeService {
   private anthropic: Anthropic;
@@ -9,6 +33,9 @@ export class ClaudeService {
   constructor() {
     this.anthropic = new Anthropic({
       apiKey: config.anthropic.apiKey,
+      defaultHeaders: {
+        "anthropic-beta": "code-execution-2025-08-25",
+      },
     });
   }
 
@@ -22,7 +49,7 @@ export class ClaudeService {
     model?: string,
     enableTools: boolean = false,
     retryCount: number = 0
-  ): Promise<string | { needsTools: true; toolCalls: any[] }> {
+  ): Promise<string | { needsTools: true; toolCalls: any[] } | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }> {
     try {
       console.log(
         `\n🧠 Claude is thinking... (model: ${
@@ -73,7 +100,10 @@ Be concise. Most replies should be only a paragraph.
               name: "web_search" as const,
               max_uses: 5, // Allow up to 5 searches per request
             },
-
+            {
+              type: "code_execution_20250825",
+              name: "code_execution",
+            },
             {
               type: "custom" as const,
               name: "read_source_code",
@@ -155,7 +185,7 @@ Be concise. Most replies should be only a paragraph.
         model: model || config.anthropic.model,
         max_tokens: 2000,
         system: fullSystemPrompt,
-        tools,
+        tools: tools as any as ToolUnion[],
         messages: messages.map((msg) => ({
           role:
             msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
@@ -271,7 +301,30 @@ Be concise. Most replies should be only a paragraph.
         }
       }
 
-      // Check if Claude wants to use custom tools (not web_search which was already executed)
+      // Log code execution results if present
+      const codeExecutionResults = response.content.filter(
+        (block: any) =>
+          block.type === "text_editor_code_execution_tool_result" ||
+          block.type === "bash_code_execution_tool_result"
+      );
+
+      if (codeExecutionResults.length > 0) {
+        console.log(
+          `💻 Code execution results found: ${codeExecutionResults.length}`
+        );
+        codeExecutionResults.forEach((result: any, index: number) => {
+          console.log(`\n  [Code Execution ${index + 1}] Type: ${result.type}`);
+          if (result.output) {
+            console.log(
+              `  Output preview: ${result.output.substring(0, 200)}${
+                result.output.length > 200 ? "..." : ""
+              }`
+            );
+          }
+        });
+      }
+
+      // Check if Claude wants to use custom tools
       const toolUseBlocks = response.content.filter(
         (block) => block.type === "tool_use"
       );
@@ -293,6 +346,20 @@ Be concise. Most replies should be only a paragraph.
       let textContent = "";
       const urlToCitationNum = new Map<string, number>(); // Maps URL to citation number
       let citationCounter = 1;
+      const generatedFiles: Array<{ name: string; content: string; mimeType?: string }> = [];
+
+      // Map to track code execution tool uses by their IDs
+      const codeExecutionMap = new Map<string, any>();
+      for (const block of response.content) {
+        const blockAny = block as any;
+        if (
+          blockAny.type === "server_tool_use" &&
+          (blockAny.name === "text_editor_code_execution" ||
+            blockAny.name === "bash_code_execution")
+        ) {
+          codeExecutionMap.set(blockAny.id, blockAny);
+        }
+      }
 
       for (const block of response.content) {
         if (block.type === "text") {
@@ -334,6 +401,84 @@ Be concise. Most replies should be only a paragraph.
 
           textContent += (textContent ? " " : "") + blockText;
         }
+
+        // Handle code execution results (cast to any to handle custom types)
+        const blockAny = block as any;
+        if (
+          blockAny.type === "text_editor_code_execution_tool_result" ||
+          blockAny.type === "bash_code_execution_tool_result"
+        ) {
+          // Handle code execution results
+          const codeResult = blockAny;
+          let resultText = "";
+
+          // Try to find the corresponding tool use to get the code/command
+          const toolUse = codeResult.tool_use_id
+            ? codeExecutionMap.get(codeResult.tool_use_id)
+            : null;
+
+          if (blockAny.type === "text_editor_code_execution_tool_result") {
+            resultText = "\n\n📝 **Python Code Execution:**\n";
+            if (toolUse && toolUse.input && toolUse.input.code) {
+              resultText += "```python\n" + toolUse.input.code + "\n```\n";
+            }
+            resultText += "**Output:**\n```\n";
+          } else {
+            resultText = "\n\n🖥️ **Bash Command Execution:**\n";
+            if (toolUse && toolUse.input && toolUse.input.command) {
+              resultText += "```bash\n" + toolUse.input.command + "\n```\n";
+            }
+            resultText += "**Output:**\n```\n";
+          }
+
+          if (codeResult.output) {
+            // Limit output to prevent overly long messages
+            const maxOutputLength = 1500;
+            if (codeResult.output.length > maxOutputLength) {
+              resultText +=
+                codeResult.output.substring(0, maxOutputLength) +
+                "\n... (output truncated)\n";
+            } else {
+              resultText += codeResult.output + "\n";
+            }
+          } else if (codeResult.error) {
+            resultText += `Error: ${codeResult.error}\n`;
+          } else {
+            resultText += "(No output)\n";
+          }
+
+          // Check for generated files in the code execution result
+          if (codeResult.files && Array.isArray(codeResult.files)) {
+            for (const file of codeResult.files) {
+              if (file.name && file.content) {
+                // Decode base64 content if present
+                let fileContent = file.content;
+                if (file.encoding === "base64") {
+                  fileContent = Buffer.from(file.content, "base64").toString();
+                }
+
+                generatedFiles.push({
+                  name: file.name,
+                  content: fileContent,
+                  mimeType: file.mime_type || getMimeType(file.name)
+                });
+
+                resultText += `\n📎 Generated file: ${file.name}`;
+              }
+            }
+          }
+
+          resultText += "```";
+          textContent += resultText;
+        }
+      }
+
+      // Return files along with text if any were generated
+      if (generatedFiles.length > 0) {
+        return {
+          text: textContent || "I couldn't generate a response.",
+          files: generatedFiles
+        };
       }
 
       return textContent || "I couldn't generate a response.";

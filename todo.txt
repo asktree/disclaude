@@ -1,4 +1,3 @@
+show cladue channel names when he's doing the message reading tool. and let him look up channel names.
 
-image processing via tool. (rather than automatic) ?
-
-build message metadata should show embed content.
+replace discord usernames with in-server nicknames
