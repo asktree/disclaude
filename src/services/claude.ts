@@ -178,6 +178,28 @@ Be concise. Most replies should be only a paragraph.
                 required: [],
               },
             },
+            {
+              type: "custom" as const,
+              name: "list_discord_channels",
+              description:
+                "List all available Discord channels that the bot can access. Returns channel names, IDs, and types (text/voice/category). Use this to discover channel IDs for the read_discord_messages tool.",
+              input_schema: {
+                type: "object" as const,
+                properties: {
+                  guild_id: {
+                    type: "string" as const,
+                    description:
+                      "Optional guild/server ID to list channels from. If not provided, lists channels from the current guild.",
+                  },
+                  include_categories: {
+                    type: "boolean" as const,
+                    description:
+                      "Whether to include category channels in the list. Defaults to false.",
+                  },
+                },
+                required: [],
+              },
+            },
           ]
         : undefined;
 

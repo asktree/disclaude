@@ -513,7 +513,8 @@ Otherwise, provide a helpful response.
                   )
               );
 
-              let formattedContent = "";
+              // Add channel information to the content
+              let formattedContent = `=== Messages from #${(targetChannel as TextChannel).name} (ID: ${targetChannelId}) ===\n\n`;
 
               if (hasImages) {
                 console.log("   📸 Found images in fetched messages");
@@ -584,6 +585,146 @@ Otherwise, provide a helpful response.
               toolResults.push({
                 tool_use_id: toolCall.id,
                 content: `Error reading Discord messages: ${error}`,
+              });
+            }
+          } else if (toolCall.name === "list_discord_channels") {
+            let statusMessage: Message | undefined;
+            try {
+              const { guild_id, include_categories = false } = toolCall.input;
+
+              console.log(
+                `   📋 Listing Discord channels${
+                  guild_id ? ` from guild ${guild_id}` : " from current guild"
+                }`
+              );
+
+              // Send initial status message to Discord
+              if (originalMessage && "send" in originalMessage.channel) {
+                statusMessage = await originalMessage.channel.send(
+                  `📋 *Listing available channels...*`
+                );
+              }
+
+              // Get the Discord client and guild
+              const client = originalMessage?.client;
+              if (!client) {
+                throw new Error("Discord client not available");
+              }
+
+              // Determine which guild to list channels from
+              let targetGuild;
+              if (guild_id) {
+                targetGuild = client.guilds.cache.get(guild_id);
+                if (!targetGuild) {
+                  throw new Error(`Guild ${guild_id} not found`);
+                }
+              } else if (originalMessage?.guild) {
+                targetGuild = originalMessage.guild;
+              } else {
+                throw new Error(
+                  "No guild specified and current message is not from a guild"
+                );
+              }
+
+              // Get all channels from the guild
+              const channels = targetGuild.channels.cache;
+
+              // Format channel list
+              let channelList = `=== Channels in ${targetGuild.name} ===\n\n`;
+
+              // Group channels by category
+              const categories = new Map<string | null, any[]>();
+
+              channels.forEach((channel) => {
+                if (channel.type === 4 && include_categories) {
+                  // Category channel
+                  if (!categories.has(channel.id)) {
+                    categories.set(channel.id, []);
+                  }
+                } else if (channel.parent) {
+                  // Channel with a category
+                  const categoryId = channel.parent.id;
+                  if (!categories.has(categoryId)) {
+                    categories.set(categoryId, []);
+                  }
+                  categories.get(categoryId)!.push(channel);
+                } else if (channel.type !== 4) {
+                  // Channel without category
+                  if (!categories.has(null)) {
+                    categories.set(null, []);
+                  }
+                  categories.get(null)!.push(channel);
+                }
+              });
+
+              // Format output
+              const channelTypeMap: { [key: number]: string } = {
+                0: "📝",  // Text
+                2: "🔊",  // Voice
+                4: "📁",  // Category
+                5: "📢",  // Announcement
+                13: "🎭", // Stage
+                15: "💬", // Forum
+              };
+
+              // Show uncategorized channels first
+              if (categories.has(null)) {
+                channelList += "**Uncategorized Channels:**\n";
+                const uncategorized = categories.get(null)!;
+                uncategorized.sort((a, b) => a.name.localeCompare(b.name));
+                uncategorized.forEach((channel) => {
+                  const emoji = channelTypeMap[channel.type] || "📌";
+                  channelList += `${emoji} #${channel.name} (ID: ${channel.id})\n`;
+                });
+                channelList += "\n";
+              }
+
+              // Show categorized channels
+              channels.forEach((category) => {
+                if (category.type === 4) {
+                  const categoryChannels = categories.get(category.id);
+                  if (categoryChannels && categoryChannels.length > 0) {
+                    channelList += `**📁 ${category.name}:**\n`;
+                    categoryChannels.sort((a, b) => a.position - b.position);
+                    categoryChannels.forEach((channel) => {
+                      const emoji = channelTypeMap[channel.type] || "📌";
+                      channelList += `  ${emoji} #${channel.name} (ID: ${channel.id})\n`;
+                    });
+                    channelList += "\n";
+                  }
+                }
+              });
+
+              channelList += `\n📊 Total: ${channels.size} channels`;
+
+              // Edit the status message to show completion
+              if (statusMessage) {
+                await statusMessage.edit(
+                  `✅ *Listed ${channels.size} channels from ${targetGuild.name}*`
+                );
+              }
+
+              toolResults.push({
+                tool_use_id: toolCall.id,
+                content: channelList,
+              });
+            } catch (error) {
+              console.error("   ❌ Error listing Discord channels:", error);
+
+              // Edit status message to show error
+              if (statusMessage) {
+                await statusMessage.edit(
+                  `⚠️ *Failed to list Discord channels: ${error}*`
+                );
+              } else if (originalMessage && "send" in originalMessage.channel) {
+                await originalMessage.channel.send(
+                  `⚠️ *Failed to list Discord channels: ${error}*`
+                );
+              }
+
+              toolResults.push({
+                tool_use_id: toolCall.id,
+                content: `Error listing Discord channels: ${error}`,
               });
             }
           }
