@@ -148,7 +148,7 @@ export interface ClaudeCodeExecutionResult {
 }
 
 // Discord attachment with proper types
-export interface ProcessableAttachment extends Attachment {
+export interface ProcessableAttachment extends Omit<Attachment, 'contentType'> {
   name: string;
   url: string;
   contentType?: string | null;

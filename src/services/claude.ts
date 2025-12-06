@@ -61,7 +61,7 @@ export class ClaudeService {
   async generateResponse(
     messages: Array<{
       role: string;
-      content: string | Anthropic.MessageParam["content"];
+      content: string | Anthropic.MessageParam["content"] | any;
     }>,
     systemPrompt?: string,
     additionalContext?: string,
@@ -397,7 +397,11 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         // Return custom tool calls for execution
         return {
           needsTools: true,
-          toolCalls: customToolBlocks,
+          toolCalls: customToolBlocks.map((block: any) => ({
+            id: block.id,
+            name: block.name,
+            input: (block.input || {}) as Record<string, any>
+          })),
         };
       }
 

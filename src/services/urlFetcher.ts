@@ -121,16 +121,14 @@ export class UrlFetcher {
         }
 
         // Return as an image content block for Claude
-        const imageContent = [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: base64,
-            },
+        const imageContent = {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: base64,
           },
-        ] as const;
+        } as const;
 
         // Cache the result
         this.urlCache.set(url, {
