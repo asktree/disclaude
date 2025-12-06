@@ -10,6 +10,7 @@ import { ContextManager } from "../services/contextManager";
 import { UrlFetcher } from "../services/urlFetcher";
 import { RepoReader } from "../services/repoReader";
 import { TokenCounter } from "../utils/tokenCounter";
+import { buildDiscordMessageRepresentation } from "../utils/messageFormatter";
 import { config } from "../config";
 
 export class MessageHandler {
@@ -70,6 +71,41 @@ export class MessageHandler {
 
       // Check if any messages have images
       const messagesArray = Array.from(contextMessages.values());
+
+      // Check for channel mentions and auto-fetch their messages
+      const channelMentions = message.content.match(/<#(\d+)>/g);
+      let linkedChannelContext = "";
+
+      if (channelMentions && isMentioned) {
+        console.log(`🔗 Found ${channelMentions.length} channel mention(s) in message`);
+
+        for (const mention of channelMentions) {
+          const channelId = mention.replace(/<#|>/g, '');
+          try {
+            // Fetch the mentioned channel
+            const mentionedChannel = await message.client.channels.fetch(channelId);
+
+            if (mentionedChannel && 'messages' in mentionedChannel) {
+              console.log(`   📖 Auto-fetching messages from mentioned channel: ${(mentionedChannel as TextChannel).name}`);
+
+              // Fetch recent messages from the mentioned channel
+              const messages = await (mentionedChannel as TextChannel).messages.fetch({ limit: 20 });
+              const messageArray = Array.from(messages.values()).reverse();
+
+              // Format the fetched messages
+              linkedChannelContext += `\n\n=== Automatically fetched from mentioned channel #${(mentionedChannel as TextChannel).name} (ID: ${channelId}) ===\n\n`;
+
+              for (const msg of messageArray) {
+                const formatted = await buildDiscordMessageRepresentation(msg, this.botId, true);
+                linkedChannelContext += formatted + "\n\n";
+              }
+            }
+          } catch (error) {
+            console.error(`   ❌ Failed to fetch messages from channel ${channelId}:`, error);
+            linkedChannelContext += `\n\n[Failed to fetch messages from channel ${channelId}: ${error}]\n`;
+          }
+        }
+      }
       const hasImages = messagesArray.some(
         (msg) =>
           msg.attachments.size > 0 &&
@@ -155,6 +191,9 @@ export class MessageHandler {
         }
       }
 
+      // Combine URL context and linked channel context
+      const additionalContext = urlContext + linkedChannelContext;
+
       // Determine if follow-up response is needed
       if (isMonitoring && !isMentioned) {
         // Add context about this being a follow-up
@@ -175,7 +214,7 @@ Otherwise, provide a helpful response.
         const response = await this.claudeService.generateResponse(
           formattedMessages,
           shouldRespondPrompt,
-          urlContext,
+          additionalContext,
           undefined,
           true // Enable tools
         );
@@ -195,7 +234,7 @@ Otherwise, provide a helpful response.
           response,
           formattedMessages,
           undefined,
-          urlContext,
+          additionalContext,
           message
         );
 
@@ -206,7 +245,7 @@ Otherwise, provide a helpful response.
         const response = await this.claudeService.generateResponse(
           formattedMessages,
           undefined,
-          urlContext,
+          additionalContext,
           undefined,
           true // Enable tools
         );
@@ -216,7 +255,7 @@ Otherwise, provide a helpful response.
           response,
           formattedMessages,
           undefined,
-          urlContext,
+          additionalContext,
           message
         );
 
