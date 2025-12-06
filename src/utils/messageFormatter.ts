@@ -20,8 +20,25 @@ export function buildDiscordMessageRepresentation(
 
   // Add username and timestamp
   const timestamp = msg.createdAt.toLocaleString();
-  // Use server nickname if available, otherwise fall back to username
-  const displayName = msg.member?.displayName || msg.author.username;
+
+  // Try to get display name from multiple sources
+  let displayName = msg.author.username; // Default fallback
+
+  // If we're in a guild, try to get the member's display name
+  if (msg.guild) {
+    // First try the message's member property
+    if (msg.member?.displayName) {
+      displayName = msg.member.displayName;
+    }
+    // If member is not populated, try to get it from the guild's cache
+    else if (msg.guild.members.cache.has(msg.author.id)) {
+      const cachedMember = msg.guild.members.cache.get(msg.author.id);
+      if (cachedMember?.displayName) {
+        displayName = cachedMember.displayName;
+      }
+    }
+  }
+
   content += `[${timestamp}] ${displayName}`;
 
   // Add bot indicator if it's a bot
