@@ -1,8 +1,3 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
-
 export interface GitCommitInfo {
   hash: string;
   shortHash: string;
@@ -16,10 +11,85 @@ export interface GitCommitInfo {
 }
 
 /**
- * Get information about the latest git commit
+ * Get information about the latest git commit from GitHub API
+ * Falls back to git commands if GitHub API fails
  */
 export async function getLatestCommitInfo(): Promise<GitCommitInfo | null> {
+  // First try GitHub API (works in production)
+  const githubInfo = await getCommitFromGitHub();
+  if (githubInfo) return githubInfo;
+
+  // Fallback to git commands (works in development)
+  return getCommitFromGit();
+}
+
+/**
+ * Fetch commit info from GitHub API
+ */
+async function getCommitFromGitHub(): Promise<GitCommitInfo | null> {
   try {
+    // Use environment variable or default to the known repo
+    const repoOwner = process.env.GITHUB_OWNER || "asktree";
+    const repoName = process.env.GITHUB_REPO || "disclaude";
+
+    // Fetch the latest commit from the main branch
+    const commitsUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/commits/main`;
+
+    console.log(`📊 Fetching commit info from GitHub: ${commitsUrl}`);
+
+    const response = await fetch(commitsUrl);
+    if (!response.ok) {
+      console.log(`⚠️ GitHub API returned ${response.status}`);
+      return null;
+    }
+
+    const commitData = await response.json() as any;
+
+    // Extract the data we need
+    const hash = commitData.sha;
+    const shortHash = hash.substring(0, 7);
+    const message = commitData.commit.message.split('\n')[0]; // First line only
+    const author = commitData.commit.author.name;
+    const date = commitData.commit.author.date.split('T')[0]; // YYYY-MM-DD format
+
+    // Get file changes
+    const filesChanged = commitData.files?.map((f: any) => f.filename) || [];
+    const insertions = commitData.stats?.additions || 0;
+    const deletions = commitData.stats?.deletions || 0;
+
+    const githubUrl = commitData.html_url;
+
+    console.log(`✅ Successfully fetched commit ${shortHash} from GitHub`);
+
+    return {
+      hash,
+      shortHash,
+      message,
+      author,
+      date,
+      filesChanged,
+      insertions,
+      deletions,
+      githubUrl,
+    };
+  } catch (error) {
+    console.error("Error fetching from GitHub API:", error);
+    return null;
+  }
+}
+
+/**
+ * Get commit info using local git commands (fallback for development)
+ */
+async function getCommitFromGit(): Promise<GitCommitInfo | null> {
+  try {
+    // Only import these if we're actually using git commands
+    const { exec } = await import("child_process");
+    const { promisify } = await import("util");
+    const execAsync = promisify(exec);
+
+    console.log("📊 Fetching commit info from local git...");
+
     // Get basic commit info
     const { stdout: commitInfo } = await execAsync(
       'git log -1 --pretty=format:"%H|%h|%s|%an|%ad" --date=short'
@@ -41,13 +111,12 @@ export async function getLatestCommitInfo(): Promise<GitCommitInfo | null> {
     let insertions = 0;
     let deletions = 0;
 
-    // Parse the stats line (e.g., "3 files changed, 45 insertions(+), 12 deletions(-)")
+    // Parse the stats line
     const statsMatch = stats.match(/(\d+) insertion.*?(\d+) deletion/);
     if (statsMatch) {
       insertions = parseInt(statsMatch[1]) || 0;
       deletions = parseInt(statsMatch[2]) || 0;
     } else {
-      // Check for only insertions or only deletions
       const insertMatch = stats.match(/(\d+) insertion/);
       const deleteMatch = stats.match(/(\d+) deletion/);
       if (insertMatch) insertions = parseInt(insertMatch[1]);
@@ -57,6 +126,8 @@ export async function getLatestCommitInfo(): Promise<GitCommitInfo | null> {
     // Get remote URL and construct GitHub link
     const { stdout: remoteUrl } = await execAsync("git remote get-url origin");
     const githubUrl = constructGitHubUrl(remoteUrl.trim(), hash);
+
+    console.log(`✅ Successfully fetched commit ${shortHash} from git`);
 
     return {
       hash,
@@ -69,8 +140,13 @@ export async function getLatestCommitInfo(): Promise<GitCommitInfo | null> {
       deletions,
       githubUrl,
     };
-  } catch (error) {
-    console.error("Error getting git commit info:", error);
+  } catch (error: any) {
+    // This is expected in production environments
+    if (error.message?.includes("git: not found")) {
+      console.log("ℹ️ Git not available (this is normal in production)");
+    } else {
+      console.error("Error getting git commit info:", error);
+    }
     return null;
   }
 }
@@ -79,14 +155,11 @@ export async function getLatestCommitInfo(): Promise<GitCommitInfo | null> {
  * Convert a git remote URL to a GitHub commit URL
  */
 function constructGitHubUrl(remoteUrl: string, commitHash: string): string {
-  // Handle both SSH and HTTPS URLs
   let repoPath = "";
 
   if (remoteUrl.startsWith("git@github.com:")) {
-    // SSH format: git@github.com:user/repo.git
     repoPath = remoteUrl.replace("git@github.com:", "").replace(".git", "");
   } else if (remoteUrl.includes("github.com")) {
-    // HTTPS format: https://github.com/user/repo.git
     const match = remoteUrl.match(/github\.com\/(.+?)(\.git)?$/);
     if (match) {
       repoPath = match[1].replace(".git", "");
@@ -100,12 +173,14 @@ function constructGitHubUrl(remoteUrl: string, commitHash: string): string {
  * Generate a natural language summary of the commit changes
  */
 export function generateCommitSummary(commitInfo: GitCommitInfo): string {
-  const { message, filesChanged, insertions, deletions, author } = commitInfo;
+  const { message, filesChanged, insertions, deletions } = commitInfo;
 
   let summary = `**${message}**\n\n`;
 
   // Describe the scope of changes
-  if (filesChanged.length === 1) {
+  if (filesChanged.length === 0) {
+    summary += "This update includes configuration or deployment changes.";
+  } else if (filesChanged.length === 1) {
     summary += `This update modifies \`${filesChanged[0]}\``;
   } else if (filesChanged.length <= 3) {
     summary += `This update modifies ${filesChanged.length} files: ${filesChanged
@@ -134,9 +209,10 @@ export function generateCommitSummary(commitInfo: GitCommitInfo): string {
     if (insertions > 0) changes.push(`+${insertions} additions`);
     if (deletions > 0) changes.push(`-${deletions} deletions`);
     summary += changes.join(" and ");
+    summary += ".";
+  } else if (filesChanged.length > 0) {
+    summary += ".";
   }
-
-  summary += ".";
 
   // Try to infer what the change does based on the commit message and files
   const lowerMessage = message.toLowerCase();
@@ -160,6 +236,9 @@ export function generateCommitSummary(commitInfo: GitCommitInfo): string {
   }
   if (filesChanged.some((f) => f.includes("config"))) {
     summary += "Configuration settings have been modified. ";
+  }
+  if (filesChanged.some((f) => f.includes("gitInfo"))) {
+    summary += "The commit notification system has been updated. ";
   }
 
   return summary;
