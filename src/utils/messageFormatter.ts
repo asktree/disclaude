@@ -5,11 +5,11 @@ import { Message } from "discord.js";
  * For assistant messages, returns only the content without metadata
  * For user messages, includes comprehensive metadata about all embedded content
  */
-export function buildDiscordMessageRepresentation(
+export async function buildDiscordMessageRepresentation(
   msg: Message,
   botId: string,
   includeContent: boolean = true
-): string {
+): Promise<string> {
   // For assistant messages, just return the content without any metadata
   if (msg.author.id === botId) {
     return msg.content || "[No text content]";
@@ -26,16 +26,22 @@ export function buildDiscordMessageRepresentation(
 
   // If we're in a guild, try to get the member's display name
   if (msg.guild) {
-    // First try the message's member property
-    if (msg.member?.displayName) {
-      displayName = msg.member.displayName;
-    }
-    // If member is not populated, try to get it from the guild's cache
-    else if (msg.guild.members.cache.has(msg.author.id)) {
-      const cachedMember = msg.guild.members.cache.get(msg.author.id);
-      if (cachedMember?.displayName) {
-        displayName = cachedMember.displayName;
+    try {
+      // First try the message's member property
+      if (msg.member?.displayName) {
+        displayName = msg.member.displayName;
       }
+      // If member is not populated, fetch it from the guild
+      else {
+        // Try to fetch the member data
+        const member = await msg.guild.members.fetch(msg.author.id).catch(() => null);
+        if (member?.displayName) {
+          displayName = member.displayName;
+        }
+      }
+    } catch (error) {
+      // If fetching fails, stick with username
+      console.log(`Could not fetch member data for ${msg.author.username}: ${error}`);
     }
   }
 

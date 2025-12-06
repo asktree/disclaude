@@ -90,7 +90,7 @@ export class MessageHandler {
             this.botId
           );
       } else {
-        formattedMessages = this.claudeService.formatDiscordMessages(
+        formattedMessages = await this.claudeService.formatDiscordMessages(
           messagesArray,
           this.botId
         );
@@ -545,7 +545,7 @@ Otherwise, provide a helpful response.
                 }
               } else {
                 // Simple text formatting (already includes rich metadata)
-                const formatted = this.claudeService.formatDiscordMessages(
+                const formatted = await this.claudeService.formatDiscordMessages(
                   messageArray,
                   this.botId
                 );

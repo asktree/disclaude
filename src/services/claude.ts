@@ -576,14 +576,18 @@ Be concise. Most replies should be only a paragraph.
     }
   }
 
-  formatDiscordMessages(
+  async formatDiscordMessages(
     messages: Message[],
     botId: string
-  ): Array<{ role: string; content: string }> {
-    return messages.map((msg) => ({
-      role: msg.author.id === botId ? "assistant" : "user",
-      content: buildDiscordMessageRepresentation(msg, botId, true),
-    }));
+  ): Promise<Array<{ role: string; content: string }>> {
+    const formattedMessages = [];
+    for (const msg of messages) {
+      formattedMessages.push({
+        role: msg.author.id === botId ? "assistant" : "user",
+        content: await buildDiscordMessageRepresentation(msg, botId, true),
+      });
+    }
+    return formattedMessages;
   }
 
   async formatDiscordMessagesWithImages(
@@ -597,7 +601,7 @@ Be concise. Most replies should be only a paragraph.
       const content: any[] = [];
 
       // Use the helper function to build metadata
-      const textContent = buildDiscordMessageRepresentation(msg, botId, true);
+      const textContent = await buildDiscordMessageRepresentation(msg, botId, true);
 
       // Add text content if present
       if (textContent) {
