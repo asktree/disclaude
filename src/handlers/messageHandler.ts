@@ -53,7 +53,9 @@ export class MessageHandler {
       });
 
       // Check if any messages have images
-      const messagesArray = Array.from(contextMessages.values());
+      // Note: Discord returns messages in reverse chronological order (newest first)
+      // We reverse them to chronological order (oldest first) for proper context
+      const messagesArray = Array.from(contextMessages.values()).reverse();
 
       // Check for channel mentions and auto-fetch their messages
       const channelMentions = message.content.match(/<#(\d+)>/g);
