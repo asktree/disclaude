@@ -54,25 +54,26 @@ async function getCommitFromGitHub(): Promise<GitCommitInfo | null> {
       return null;
     }
 
-    const commitData = await response.json() as any;
+    const commitData = (await response.json()) as any;
 
     // Extract the data we need
     const hash = commitData.sha;
     const shortHash = hash.substring(0, 7);
-    const message = commitData.commit.message.split('\n')[0]; // First line only
+    const message = commitData.commit.message.split("\n")[0]; // First line only
     const author = commitData.commit.author.name;
-    const date = commitData.commit.author.date.split('T')[0]; // YYYY-MM-DD format
+    const date = commitData.commit.author.date.split("T")[0]; // YYYY-MM-DD format
 
     // Get file changes with detailed information
-    const fileDetails: FileChange[] = commitData.files?.map((f: any) => ({
-      filename: f.filename,
-      additions: f.additions || 0,
-      deletions: f.deletions || 0,
-      patch: f.patch, // Contains the actual diff
-      status: f.status, // added, modified, removed, etc.
-    })) || [];
+    const fileDetails: FileChange[] =
+      commitData.files?.map((f: any) => ({
+        filename: f.filename,
+        additions: f.additions || 0,
+        deletions: f.deletions || 0,
+        patch: f.patch, // Contains the actual diff
+        status: f.status, // added, modified, removed, etc.
+      })) || [];
 
-    const filesChanged = fileDetails.map(f => f.filename);
+    const filesChanged = fileDetails.map((f) => f.filename);
     const insertions = commitData.stats?.additions || 0;
     const deletions = commitData.stats?.deletions || 0;
 
@@ -120,14 +121,10 @@ async function getCommitFromGit(): Promise<GitCommitInfo | null> {
     const { stdout: diffStat } = await execAsync(
       "git diff-tree --no-commit-id --name-only -r HEAD"
     );
-    const filesChanged = diffStat
-      .split("\n")
-      .filter((file) => file.length > 0);
+    const filesChanged = diffStat.split("\n").filter((file) => file.length > 0);
 
     // Get insertion/deletion stats
-    const { stdout: stats } = await execAsync(
-      "git log -1 --stat --format="
-    );
+    const { stdout: stats } = await execAsync("git log -1 --stat --format=");
     let insertions = 0;
     let deletions = 0;
 
@@ -193,8 +190,11 @@ function constructGitHubUrl(remoteUrl: string, commitHash: string): string {
  * Generate a commit summary by using Claude to analyze the diffs
  * This sends the actual code changes to Claude for intelligent analysis
  */
-export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<string> {
-  const { message, filesChanged, fileDetails, insertions, deletions } = commitInfo;
+export async function generateCommitSummary(
+  commitInfo: GitCommitInfo
+): Promise<string> {
+  const { message, filesChanged, fileDetails, insertions, deletions } =
+    commitInfo;
 
   // Compact stats line
   const statsLine = `*📝 ${filesChanged.length} files | +${insertions}/-${deletions}*`;
@@ -216,8 +216,8 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
 
     if (file.patch) {
       // Include the actual diff patch (limited to reasonable size)
-      const patchLines = file.patch.split('\n').slice(0, 100); // Limit to first 100 lines per file
-      diffContent += "```diff\n" + patchLines.join('\n') + "\n```\n\n";
+      const patchLines = file.patch.split("\n").slice(0, 100); // Limit to first 100 lines per file
+      diffContent += "```diff\n" + patchLines.join("\n") + "\n```\n\n";
     }
   }
 
@@ -230,27 +230,31 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
     const response = await anthropic.messages.create({
       model: "claude-3-haiku-20240307", // Use Haiku for speed and cost efficiency
       max_tokens: 200,
-      messages: [{
-        role: "user",
-        content: `Look at this git commit and:
+      messages: [
+        {
+          role: "user",
+          content: `Look at this git commit and:
 1. Write ONE concise paragraph explaining what changed and why it matters
 2. Check for any CRITICAL bugs, security issues, or problems in the code changes
 
 ${diffContent}
 
-Format your response as:
-- One short paragraph (2-3 sentences) capturing the essence of this change
-- If you spot any critical issues, add a line starting with "⚠️ WARNING:" followed by a brief description
+Format your response as one short paragraph (2-3 sentences) capturing the essence of this change.
 
-Focus on actual functionality impact and real problems only. Don't mention minor style issues.`
-      }],
+Also: If (AND ONLY IF!!!!) you spot any critical issues, add a line starting with "⚠️ WARNING:" followed by a brief description. Focus on actual functionality impact and real problems only. Don't mention minor style issues. 
+`,
+        },
+      ],
     });
 
-    const summary = response.content[0].type === 'text' ? response.content[0].text : '';
+    const summary =
+      response.content[0].type === "text" ? response.content[0].text : "";
     return `**${message}**\n\n${statsLine}\n\n${summary}`;
   } catch (error) {
     console.error("Failed to generate AI summary:", error);
     // Fallback to basic summary if API fails
-    return `**${message}**\n\n${statsLine}\n\nFiles changed: ${filesChanged.join(', ')}`;
+    return `**${message}**\n\n${statsLine}\n\nFiles changed: ${filesChanged.join(
+      ", "
+    )}`;
   }
 }
