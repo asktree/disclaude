@@ -1,17 +1,59 @@
 import * as cheerio from "cheerio";
-import { URL_FETCH_TIMEOUT_MS, MAX_URL_CONTENT_LENGTH, URL_CACHE_TTL_MS, MAX_IMAGE_SIZE_MB } from "../constants";
+import {
+  URL_FETCH_TIMEOUT_MS,
+  MAX_URL_CONTENT_LENGTH,
+  URL_CACHE_TTL_MS,
+  MAX_IMAGE_SIZE_MB,
+  URL_CACHE_MAX_SIZE_MB,
+  CACHE_CLEANUP_INTERVAL_MS
+} from "../constants";
 import { FetchedUrl, UrlCacheEntry, ClaudeContent } from "../types";
+import { LRUCache } from "../utils/cache";
 
 export class UrlFetcher {
-  private urlCache: Map<string, UrlCacheEntry> = new Map();
-  private cacheTimeout = URL_CACHE_TTL_MS;
+  private urlCache: LRUCache<UrlCacheEntry>;
+  private cleanupInterval: NodeJS.Timeout;
+
+  constructor() {
+    // Initialize LRU cache with size and TTL limits
+    this.urlCache = new LRUCache<UrlCacheEntry>(URL_CACHE_MAX_SIZE_MB, URL_CACHE_TTL_MS);
+
+    // Run periodic cleanup to remove expired entries
+    this.cleanupInterval = setInterval(() => {
+      const statsBefore = this.urlCache.getStats();
+      if (statsBefore.count > 0) {
+        console.log(`🧹 Running cache cleanup - Current: ${statsBefore.count} entries, ${statsBefore.sizeMB.toFixed(2)}MB`);
+        // Getting an item triggers expiration check
+        const keys = this.urlCache.getKeys();
+        for (const key of keys) {
+          this.urlCache.get(key); // This will auto-remove expired entries
+        }
+        const statsAfter = this.urlCache.getStats();
+        if (statsAfter.count < statsBefore.count) {
+          console.log(`   ✅ Cleaned up ${statsBefore.count - statsAfter.count} expired entries`);
+        }
+      }
+    }, CACHE_CLEANUP_INTERVAL_MS);
+  }
+
+  /**
+   * Clean up resources when the fetcher is destroyed
+   */
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.urlCache.clear();
+  }
 
   async fetchUrl(url: string): Promise<FetchedUrl> {
     try {
       // Check cache first
       const cached = this.urlCache.get(url);
-      if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+      if (cached) {
         console.log(`📦 Using cached content for ${url}`);
+        const stats = this.urlCache.getStats();
+        console.log(`   Cache stats: ${stats.count} entries, ${stats.sizeMB.toFixed(2)}MB / ${stats.maxSizeMB}MB (${stats.utilizationPercent.toFixed(1)}%)`);
         return { url, content: cached.content, isImage: cached.isImage };
       }
 
@@ -93,7 +135,7 @@ export class UrlFetcher {
         // Cache the result
         this.urlCache.set(url, {
           content: imageContent,
-          timestamp: Date.now(),
+          timestamp: Date.now(), // LRUCache will use its own timestamp but we keep for compatibility
           isImage: true,
         });
 

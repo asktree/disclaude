@@ -27,6 +27,8 @@ export const URL_FETCH_TIMEOUT_MS = 10000;
 export const MAX_URL_CONTENT_LENGTH = 5000;
 export const MAX_RECENT_MESSAGES_FOR_URL_SEARCH = 5;
 export const URL_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+export const URL_CACHE_MAX_SIZE_MB = 50;
+export const CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Tool Execution
 export const MAX_TOOL_ROUNDS = 5;
