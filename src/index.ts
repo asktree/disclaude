@@ -50,7 +50,7 @@ class DisclaudeBot {
 
           // Create the message with embed
           const message = {
-            content: `🎉 I've been updated: \`${commitInfo.message}\`\n${commitInfo.githubUrl}`,
+            content: `🎉 I've been updated!`,
             embeds: [
               {
                 title: "Update Details",
@@ -59,12 +59,7 @@ class DisclaudeBot {
                 fields: [
                   {
                     name: "Commit",
-                    value: `\`${commitInfo.shortHash}\``,
-                    inline: true,
-                  },
-                  {
-                    name: "Author",
-                    value: commitInfo.author,
+                    value: `[\`${commitInfo.shortHash}\`](${commitInfo.githubUrl})`,
                     inline: true,
                   },
                   {
