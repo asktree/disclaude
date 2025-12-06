@@ -11,6 +11,17 @@ import {
   MAX_IMAGE_SIZE_MB,
   IMAGE_ESTIMATED_TOKENS
 } from "../constants";
+import {
+  ClaudeMessage,
+  ClaudeResponse,
+  ClaudeContent,
+  ClaudeToolCall,
+  GeneratedFile,
+  ClaudeTextBlock,
+  ClaudeToolUseBlock,
+  ClaudeWebSearchResult,
+  ClaudeCodeExecutionResult
+} from "../types";
 
 // Helper function to determine MIME type from filename
 function getMimeType(filename: string): string {
@@ -57,7 +68,7 @@ export class ClaudeService {
     model?: string,
     enableTools: boolean = false,
     retryCount: number = 0
-  ): Promise<string | { needsTools: true; toolCalls: any[] } | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }> {
+  ): Promise<ClaudeResponse> {
     try {
       console.log(
         `\n🧠 Claude is thinking... (model: ${
@@ -243,19 +254,19 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
       // Log all content blocks for debugging
       console.log(
-        `📊 Response blocks: ${response.content.map((b) => b.type).join(", ")}`
+        `📊 Response blocks: ${response.content.map((b: any) => b.type).join(", ")}`
       );
 
       // Log each text block individually
       const textBlocks = response.content.filter(
-        (block) => block.type === "text"
+        (block: any) => block.type === "text"
       );
       if (textBlocks.length > 0) {
         console.log(`📝 Found ${textBlocks.length} text blocks:`);
         let totalCitations = 0;
 
-        textBlocks.forEach((block, index) => {
-          const textBlock = block as any;
+        textBlocks.forEach((block: any, index: number) => {
+          const textBlock = block;
           console.log(
             `\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`
           );

@@ -1,16 +1,12 @@
 import * as cheerio from "cheerio";
 import { URL_FETCH_TIMEOUT_MS, MAX_URL_CONTENT_LENGTH, URL_CACHE_TTL_MS, MAX_IMAGE_SIZE_MB } from "../constants";
+import { FetchedUrl, UrlCacheEntry, ClaudeContent } from "../types";
 
 export class UrlFetcher {
-  private urlCache: Map<
-    string,
-    { content: any; timestamp: number; isImage?: boolean }
-  > = new Map();
+  private urlCache: Map<string, UrlCacheEntry> = new Map();
   private cacheTimeout = URL_CACHE_TTL_MS;
 
-  async fetchUrl(
-    url: string
-  ): Promise<{ url: string; content: any; title?: string; isImage?: boolean }> {
+  async fetchUrl(url: string): Promise<FetchedUrl> {
     try {
       // Check cache first
       const cached = this.urlCache.get(url);
@@ -202,11 +198,7 @@ export class UrlFetcher {
     return [...new Set(matches)]; // Remove duplicates
   }
 
-  async fetchAllUrls(
-    urls: string[]
-  ): Promise<
-    Array<{ url: string; content: any; title?: string; isImage?: boolean }>
-  > {
+  async fetchAllUrls(urls: string[]): Promise<FetchedUrl[]> {
     // Limit to 5 URLs to avoid overwhelming the context
     const limitedUrls = urls.slice(0, 5);
 

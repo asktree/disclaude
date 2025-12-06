@@ -1,8 +1,9 @@
-import { encoding_for_model, TiktokenModel } from '@dqbd/tiktoken';
+import { encoding_for_model, TiktokenModel, Tiktoken } from '@dqbd/tiktoken';
 import { IMAGE_ESTIMATED_TOKENS } from '../constants';
+import { ClaudeMessage } from '../types';
 
 export class TokenCounter {
-  private encoder: any;
+  private encoder: Tiktoken;
 
   constructor() {
     // Use cl100k_base encoding (used by GPT-4 and Claude models)
@@ -21,7 +22,7 @@ export class TokenCounter {
     }
   }
 
-  countMessageTokens(messages: Array<{ role: string; content: string | any[] }>): number {
+  countMessageTokens(messages: ClaudeMessage[]): number {
     let totalTokens = 0;
 
     for (const message of messages) {
@@ -52,10 +53,10 @@ export class TokenCounter {
   }
 
   trimMessagesToTokenLimit(
-    messages: Array<{ role: string; content: string | any[] }>,
+    messages: ClaudeMessage[],
     maxTokens: number,
     preserveLatest: number = 5
-  ): Array<{ role: string; content: string | any[] }> {
+  ): ClaudeMessage[] {
     if (messages.length <= preserveLatest) {
       return messages;
     }

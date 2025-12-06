@@ -21,6 +21,17 @@ import {
   MAX_DISCORD_MESSAGES_LIMIT,
   MAX_CODE_OUTPUT_LENGTH
 } from "../constants";
+import {
+  ClaudeMessage,
+  ClaudeResponse,
+  ClaudeToolCall,
+  ClaudeToolResult,
+  GeneratedFile,
+  ChannelFetchResult,
+  ChannelFetchError,
+  FetchedUrl,
+  ReadDiscordMessagesInput
+} from "../types";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
@@ -93,7 +104,7 @@ export class MessageHandler {
         }
 
         // Fetch all channels concurrently
-        const channelPromises = channelsToFetch.map(async (channelId) => {
+        const channelPromises = channelsToFetch.map(async (channelId): Promise<ChannelFetchResult | ChannelFetchError | null> => {
           try {
             const mentionedChannel = await message.client.channels.fetch(channelId);
 
@@ -151,7 +162,7 @@ export class MessageHandler {
       );
 
       // Format messages for Claude (with images if present)
-      let formattedMessages: any[];
+      let formattedMessages: ClaudeMessage[];
       if (hasImages) {
         console.log("📸 Found images in message history, processing...");
         formattedMessages =
@@ -200,7 +211,7 @@ export class MessageHandler {
               ? recentMessages[i].content
               : JSON.stringify(recentMessages[i].content);
 
-          const urls = this.urlFetcher.extractUrls(messageText);
+          const urls = this.urlFetcher.extractUrls(messageText as string);
           if (urls.length > 0) {
             mostRecentUrl = urls[urls.length - 1]; // Get the last URL in the message
             break;
@@ -256,13 +267,13 @@ export class MessageHandler {
   }
 
   private async handleToolExecution(
-    response: string | { needsTools: true; toolCalls: any[] } | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> },
-    formattedMessages: any[],
+    response: ClaudeResponse,
+    formattedMessages: ClaudeMessage[],
     systemPrompt?: string,
     urlContext?: string,
     originalMessage?: Message,
     maxRounds: number = MAX_TOOL_ROUNDS
-  ): Promise<string | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }> {
+  ): Promise<string | { text: string; files: GeneratedFile[] }> {
     let currentResponse = response;
     let roundCount = 0;
 
@@ -292,7 +303,7 @@ export class MessageHandler {
         console.log(
           `\n🤖 [Round ${roundCount}] Claude wants to use ${currentResponse.toolCalls.length} tool(s)`
         );
-        const toolResults: any[] = [];
+        const toolResults: ClaudeToolResult[] = [];
 
         for (const toolCall of currentResponse.toolCalls) {
           console.log(`\n🔧 Tool Call: ${toolCall.name}`);
@@ -465,7 +476,7 @@ export class MessageHandler {
                 before_message_id,
                 after_message_id,
                 around_message_id,
-              } = toolCall.input;
+              } = toolCall.input as ReadDiscordMessagesInput;
 
               // Use current channel if not specified
               const targetChannelId = channel_id || originalMessage?.channelId;
@@ -506,7 +517,13 @@ export class MessageHandler {
               }
 
               // Build fetch options for Discord API
-              const fetchOptions: any = { limit: Math.min(limit, MAX_DISCORD_MESSAGES_LIMIT) };
+              interface FetchOptions {
+                limit: number;
+                before?: string;
+                after?: string;
+                around?: string;
+              }
+              const fetchOptions: FetchOptions = { limit: Math.min(limit, MAX_DISCORD_MESSAGES_LIMIT) };
               if (before_message_id) fetchOptions.before = before_message_id;
               if (after_message_id) fetchOptions.after = after_message_id;
               if (around_message_id) fetchOptions.around = around_message_id;
