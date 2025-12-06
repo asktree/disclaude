@@ -699,7 +699,8 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         );
       }
 
-      for (const attachment of imageAttachments) {
+      // Process all images concurrently
+      const imagePromises = imageAttachments.map(async (attachment) => {
         try {
           console.log(
             `🖼️ Processing image: ${attachment.name} (${attachment.url})`
@@ -722,13 +723,12 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
                 attachment.name
               }: Too large (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`
             );
-            content.push({
+            return {
               type: "text",
               text: `[Image too large to process: ${
                 attachment.name
               } (${sizeMB.toFixed(2)}MB)]`,
-            });
-            continue;
+            } as const;
           }
 
           const base64 = Buffer.from(arrayBuffer).toString("base64");
@@ -774,36 +774,45 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             console.log(
               `⚠️ Skipping image ${attachment.name}: Invalid or corrupted image data`
             );
-            content.push({
+            return {
               type: "text",
               text: `[Unable to process image: ${attachment.name} - may be corrupted]`,
-            });
-            continue;
+            } as const;
           }
-
-          content.push({
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: base64,
-            },
-          });
 
           console.log(
             `✅ Successfully processed image: ${
               attachment.name
             } (${sizeMB.toFixed(2)}MB, ${mediaType})`
           );
+
+          return {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType,
+              data: base64,
+            },
+          } as const;
         } catch (error) {
           console.error(
             `❌ Failed to process image ${attachment.name}:`,
             error
           );
-          content.push({
+          return {
             type: "text",
             text: `[Failed to load image: ${attachment.name}]`,
-          });
+          } as const;
+        }
+      });
+
+      // Wait for all images to be processed
+      const imageResults = await Promise.all(imagePromises);
+
+      // Add successful results to content
+      for (const result of imageResults) {
+        if (result) {
+          content.push(result);
         }
       }
 

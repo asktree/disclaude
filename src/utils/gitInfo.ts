@@ -229,14 +229,20 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
 
     const response = await anthropic.messages.create({
       model: "claude-3-haiku-20240307", // Use Haiku for speed and cost efficiency
-      max_tokens: 150,
+      max_tokens: 200,
       messages: [{
         role: "user",
-        content: `Look at this git commit and write ONE concise paragraph explaining what changed and why it matters. Focus on the actual functionality impact, not just listing files.
+        content: `Look at this git commit and:
+1. Write ONE concise paragraph explaining what changed and why it matters
+2. Check for any CRITICAL bugs, security issues, or problems in the code changes
 
 ${diffContent}
 
-Write a single short paragraph (2-3 sentences max) that captures the essence of this change.`
+Format your response as:
+- One short paragraph (2-3 sentences) capturing the essence of this change
+- If you spot any critical issues, add a line starting with "⚠️ WARNING:" followed by a brief description
+
+Focus on actual functionality impact and real problems only. Don't mention minor style issues.`
       }],
     });
 

@@ -74,36 +74,69 @@ export class MessageHandler {
       if (channelMentions && isMentioned) {
         console.log(`🔗 Found ${channelMentions.length} channel mention(s) in message`);
 
+        // Extract and validate channel IDs
+        const channelIds: string[] = [];
         for (const mention of channelMentions) {
-          // Safely extract channel ID from mention
           const channelMatch = mention.match(/<#(\d+)>/);
-          if (!channelMatch || !channelMatch[1]) {
+          if (channelMatch && channelMatch[1]) {
+            channelIds.push(channelMatch[1]);
+          } else {
             console.error(`   ❌ Invalid channel mention format: ${mention}`);
-            continue;
           }
-          const channelId = channelMatch[1];
+        }
+
+        // Limit concurrent fetches to avoid rate limits
+        const MAX_CONCURRENT_FETCHES = 3;
+        const channelsToFetch = channelIds.slice(0, MAX_CONCURRENT_FETCHES);
+        if (channelIds.length > MAX_CONCURRENT_FETCHES) {
+          console.log(`   ⚠️ Limiting to first ${MAX_CONCURRENT_FETCHES} channels (${channelIds.length} mentioned)`);
+        }
+
+        // Fetch all channels concurrently
+        const channelPromises = channelsToFetch.map(async (channelId) => {
           try {
-            // Fetch the mentioned channel
             const mentionedChannel = await message.client.channels.fetch(channelId);
 
             if (mentionedChannel && 'messages' in mentionedChannel) {
-              console.log(`   📖 Auto-fetching messages from mentioned channel: ${(mentionedChannel as TextChannel).name}`);
+              console.log(`   📖 Fetching from #${(mentionedChannel as TextChannel).name}`);
 
-              // Fetch recent messages from the mentioned channel
+              // Fetch messages
               const messages = await (mentionedChannel as TextChannel).messages.fetch({ limit: MAX_CHANNEL_FETCH_LIMIT });
               const messageArray = Array.from(messages.values()).reverse();
 
-              // Format the fetched messages
-              linkedChannelContext += `\n\n=== Automatically fetched from mentioned channel #${(mentionedChannel as TextChannel).name} (ID: ${channelId}) ===\n\n`;
+              // Format messages concurrently
+              const formattedMessages = await Promise.all(
+                messageArray.map(msg => buildDiscordMessageRepresentation(msg, this.botId, true))
+              );
 
-              for (const msg of messageArray) {
-                const formatted = await buildDiscordMessageRepresentation(msg, this.botId, true);
-                linkedChannelContext += formatted + "\n\n";
-              }
+              return {
+                channelName: (mentionedChannel as TextChannel).name,
+                channelId,
+                content: formattedMessages.join("\n\n")
+              };
             }
+            return null;
           } catch (error) {
-            console.error(`   ❌ Failed to fetch messages from channel ${channelId}:`, error);
-            linkedChannelContext += `\n\n[Failed to fetch messages from channel ${channelId}: ${error}]\n`;
+            console.error(`   ❌ Failed to fetch channel ${channelId}:`, error);
+            return {
+              channelId,
+              error: error instanceof Error ? error.message : String(error)
+            };
+          }
+        });
+
+        // Wait for all channel fetches to complete
+        const channelResults = await Promise.all(channelPromises);
+
+        // Build the context string
+        for (const result of channelResults) {
+          if (result) {
+            if ('error' in result) {
+              linkedChannelContext += `\n\n[Failed to fetch messages from channel ${result.channelId}: ${result.error}]\n`;
+            } else if (result.content) {
+              linkedChannelContext += `\n\n=== Automatically fetched from mentioned channel #${result.channelName} (ID: ${result.channelId}) ===\n\n`;
+              linkedChannelContext += result.content;
+            }
           }
         }
       }
