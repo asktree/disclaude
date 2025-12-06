@@ -196,9 +196,12 @@ function constructGitHubUrl(remoteUrl: string, commitHash: string): string {
 export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<string> {
   const { message, filesChanged, fileDetails, insertions, deletions } = commitInfo;
 
+  // Compact stats line
+  const statsLine = `*📝 ${filesChanged.length} files | +${insertions}/-${deletions}*`;
+
   // If we don't have file details with patches, return a simple summary
   if (!fileDetails || fileDetails.length === 0) {
-    return `**${message}**\n\n📝 Files: ${filesChanged.length} | 📊 Changes: +${insertions}/-${deletions}`;
+    return `**${message}**\n\n${statsLine}`;
   }
 
   // Prepare the diff content for Claude
@@ -226,27 +229,22 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
 
     const response = await anthropic.messages.create({
       model: "claude-3-haiku-20240307", // Use Haiku for speed and cost efficiency
-      max_tokens: 500,
+      max_tokens: 150,
       messages: [{
         role: "user",
-        content: `Analyze this git commit and provide a concise summary of what changed and why it matters. Focus on the actual functionality changes, not just describing the files. Be specific about what the code changes actually do.
+        content: `Look at this git commit and write ONE concise paragraph explaining what changed and why it matters. Focus on the actual functionality impact, not just listing files.
 
 ${diffContent}
 
-Provide a brief summary that explains:
-1. What functionality was added, changed, or fixed
-2. Why these changes matter to users or developers
-3. Any important technical details
-
-Keep it concise but informative. Use markdown formatting.`
+Write a single short paragraph (2-3 sentences max) that captures the essence of this change.`
       }],
     });
 
     const summary = response.content[0].type === 'text' ? response.content[0].text : '';
-    return `**${message}**\n\n${summary}`;
+    return `**${message}**\n\n${statsLine}\n\n${summary}`;
   } catch (error) {
     console.error("Failed to generate AI summary:", error);
     // Fallback to basic summary if API fails
-    return `**${message}**\n\n📝 Files: ${filesChanged.length} | 📊 Changes: +${insertions}/-${deletions}\n\nFiles changed: ${filesChanged.join(', ')}`;
+    return `**${message}**\n\n${statsLine}\n\nFiles changed: ${filesChanged.join(', ')}`;
   }
 }
