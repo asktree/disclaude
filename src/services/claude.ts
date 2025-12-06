@@ -3,6 +3,14 @@ import { config } from "../config";
 import { Message } from "discord.js";
 import { buildDiscordMessageRepresentation } from "../utils/messageFormatter";
 import { ToolUnion } from "@anthropic-ai/sdk/resources/messages";
+import {
+  ANTHROPIC_MAX_RETRIES,
+  ANTHROPIC_RETRY_DELAY_MS,
+  ANTHROPIC_MAX_RETRY_DELAY_MS,
+  MAX_CODE_OUTPUT_LENGTH,
+  MAX_IMAGE_SIZE_MB,
+  IMAGE_ESTIMATED_TOKENS
+} from "../constants";
 
 // Helper function to determine MIME type from filename
 function getMimeType(filename: string): string {
@@ -529,12 +537,12 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       const isOverloaded = error?.message?.includes("Overloaded");
       const hasRetryHeader = error?.headers?.get?.("x-should-retry") === "true";
 
-      if ((isRetryable || isOverloaded || hasRetryHeader) && retryCount < 3) {
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff: 1s, 2s, 4s (max 10s)
+      if ((isRetryable || isOverloaded || hasRetryHeader) && retryCount < ANTHROPIC_MAX_RETRIES) {
+        const delay = Math.min(ANTHROPIC_RETRY_DELAY_MS * Math.pow(2, retryCount), ANTHROPIC_MAX_RETRY_DELAY_MS); // Exponential backoff with max delay
         console.log(
           `⚠️ API error (${
             error?.status || "unknown"
-          }), retrying in ${delay}ms... (attempt ${retryCount + 1}/3)`
+          }), retrying in ${delay}ms... (attempt ${retryCount + 1}/${ANTHROPIC_MAX_RETRIES})`
         );
 
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -708,11 +716,11 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
           // Check if the image is too large (Claude has a limit)
           const sizeMB = arrayBuffer.byteLength / (1024 * 1024);
-          if (sizeMB > 10) {
+          if (sizeMB > MAX_IMAGE_SIZE_MB) {
             console.log(
               `⚠️ Skipping image ${
                 attachment.name
-              }: Too large (${sizeMB.toFixed(2)}MB > 10MB)`
+              }: Too large (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`
             );
             content.push({
               type: "text",

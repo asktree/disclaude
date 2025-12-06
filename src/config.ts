@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { DEFAULT_MAX_CONTEXT_MESSAGES, DEFAULT_MAX_CONTEXT_TOKENS } from "./constants";
 
 dotenv.config();
 
@@ -12,8 +13,8 @@ export const config = {
     model: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022",
   },
   bot: {
-    maxContextMessages: parseInt(process.env.MAX_CONTEXT_MESSAGES || "100", 10), // Fetch more messages
-    maxContextTokens: parseInt(process.env.MAX_CONTEXT_TOKENS || "8000", 10), // But limit by tokens
+    maxContextMessages: parseInt(process.env.MAX_CONTEXT_MESSAGES || String(DEFAULT_MAX_CONTEXT_MESSAGES), 10),
+    maxContextTokens: parseInt(process.env.MAX_CONTEXT_TOKENS || String(DEFAULT_MAX_CONTEXT_TOKENS), 10),
     fetchUrls: process.env.FETCH_URLS !== "false", // Default true
   },
 };

@@ -1,4 +1,5 @@
 import { encoding_for_model, TiktokenModel } from '@dqbd/tiktoken';
+import { IMAGE_ESTIMATED_TOKENS } from '../constants';
 
 export class TokenCounter {
   private encoder: any;
@@ -41,7 +42,7 @@ export class TokenCounter {
           } else if (block.type === 'image') {
             // Images typically consume ~1000-2000 tokens depending on size
             // Use a conservative estimate
-            totalTokens += 1500;
+            totalTokens += IMAGE_ESTIMATED_TOKENS;
           }
         }
       }

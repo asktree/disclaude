@@ -11,6 +11,16 @@ import { RepoReader } from "../services/repoReader";
 import { TokenCounter } from "../utils/tokenCounter";
 import { buildDiscordMessageRepresentation } from "../utils/messageFormatter";
 import { config } from "../config";
+import {
+  MAX_CHANNEL_FETCH_LIMIT,
+  MAX_TOOL_ROUNDS,
+  MIN_PRESERVED_MESSAGES,
+  DISCORD_MAX_MESSAGE_LENGTH,
+  MAX_RECENT_MESSAGES_FOR_URL_SEARCH,
+  DEFAULT_DISCORD_MESSAGES_LIMIT,
+  MAX_DISCORD_MESSAGES_LIMIT,
+  MAX_CODE_OUTPUT_LENGTH
+} from "../constants";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
@@ -80,7 +90,7 @@ export class MessageHandler {
               console.log(`   📖 Auto-fetching messages from mentioned channel: ${(mentionedChannel as TextChannel).name}`);
 
               // Fetch recent messages from the mentioned channel
-              const messages = await (mentionedChannel as TextChannel).messages.fetch({ limit: 20 });
+              const messages = await (mentionedChannel as TextChannel).messages.fetch({ limit: MAX_CHANNEL_FETCH_LIMIT });
               const messageArray = Array.from(messages.values()).reverse();
 
               // Format the fetched messages
@@ -134,7 +144,7 @@ export class MessageHandler {
         formattedMessages = this.tokenCounter.trimMessagesToTokenLimit(
           formattedMessages,
           config.bot.maxContextTokens,
-          10 // Preserve at least the last 10 messages
+          MIN_PRESERVED_MESSAGES // Preserve at least the last 10 messages
         );
         const trimmedTokenCount =
           this.tokenCounter.countMessageTokens(formattedMessages);
@@ -146,8 +156,8 @@ export class MessageHandler {
       // Extract and fetch the most recent URL from the last 5 messages if enabled
       let urlContext = "";
       if (config.bot.fetchUrls) {
-        // Get only the last 5 messages
-        const recentMessages = formattedMessages.slice(-5);
+        // Get only the last few messages for URL search
+        const recentMessages = formattedMessages.slice(-MAX_RECENT_MESSAGES_FOR_URL_SEARCH);
 
         // Find the most recent URL by checking messages from newest to oldest
         let mostRecentUrl: string | null = null;
@@ -218,7 +228,7 @@ export class MessageHandler {
     systemPrompt?: string,
     urlContext?: string,
     originalMessage?: Message,
-    maxRounds: number = 5
+    maxRounds: number = MAX_TOOL_ROUNDS
   ): Promise<string | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }> {
     let currentResponse = response;
     let roundCount = 0;
@@ -418,7 +428,7 @@ export class MessageHandler {
               // Parse tool input
               const {
                 channel_id,
-                limit = 50,
+                limit = DEFAULT_DISCORD_MESSAGES_LIMIT,
                 before_message_id,
                 after_message_id,
                 around_message_id,
@@ -463,7 +473,7 @@ export class MessageHandler {
               }
 
               // Build fetch options for Discord API
-              const fetchOptions: any = { limit: Math.min(limit, 100) };
+              const fetchOptions: any = { limit: Math.min(limit, MAX_DISCORD_MESSAGES_LIMIT) };
               if (before_message_id) fetchOptions.before = before_message_id;
               if (after_message_id) fetchOptions.after = after_message_id;
               if (around_message_id) fetchOptions.around = around_message_id;
@@ -776,7 +786,6 @@ export class MessageHandler {
     message: Message,
     response: string | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }
   ): Promise<void> {
-    const DISCORD_CHAR_LIMIT = 2000;
 
     // Extract text and files
     let responseText: string;
@@ -796,7 +805,7 @@ export class MessageHandler {
       description: `Generated file: ${file.name}`
     }));
 
-    if (responseText.length <= DISCORD_CHAR_LIMIT) {
+    if (responseText.length <= DISCORD_MAX_MESSAGE_LENGTH) {
       // Response fits within limit, send as-is with attachments
       await message.reply({
         content: responseText,
@@ -805,7 +814,7 @@ export class MessageHandler {
     } else {
       // Split long messages into chunks
       console.log(
-        `📝 Response is ${responseText.length} chars (exceeds ${DISCORD_CHAR_LIMIT} limit), splitting...`
+        `📝 Response is ${responseText.length} chars (exceeds ${DISCORD_MAX_MESSAGE_LENGTH} limit), splitting...`
       );
 
       // Log if response contains citations to help debug
@@ -813,7 +822,7 @@ export class MessageHandler {
         console.log("⚠️ Response contains citations - monitoring for issues");
       }
 
-      const chunks = this.splitMessage(responseText, DISCORD_CHAR_LIMIT);
+      const chunks = this.splitMessage(responseText, DISCORD_MAX_MESSAGE_LENGTH);
 
       // Send first chunk as reply with attachments (if any)
       await message.reply({

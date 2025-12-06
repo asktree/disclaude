@@ -1,11 +1,12 @@
 import * as cheerio from "cheerio";
+import { URL_FETCH_TIMEOUT_MS, MAX_URL_CONTENT_LENGTH, URL_CACHE_TTL_MS, MAX_IMAGE_SIZE_MB } from "../constants";
 
 export class UrlFetcher {
   private urlCache: Map<
     string,
     { content: any; timestamp: number; isImage?: boolean }
   > = new Map();
-  private cacheTimeout = 15 * 60 * 1000; // 15 minutes
+  private cacheTimeout = URL_CACHE_TTL_MS;
 
   async fetchUrl(
     url: string
@@ -25,7 +26,7 @@ export class UrlFetcher {
           "User-Agent":
             "Mozilla/5.0 (compatible; DisclaudeBot/1.0; +https://github.com/asktree/disclaude)",
         },
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -42,12 +43,12 @@ export class UrlFetcher {
         const sizeMB = arrayBuffer.byteLength / (1024 * 1024);
 
         // Check size limit
-        if (sizeMB > 10) {
+        if (sizeMB > MAX_IMAGE_SIZE_MB) {
           return {
             url,
             content: `Image too large to process (${sizeMB.toFixed(
               2
-            )}MB > 10MB)`,
+            )}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
             isImage: true,
           };
         }
@@ -142,8 +143,8 @@ export class UrlFetcher {
         content = content.replace(/\s+/g, " ").trim();
 
         // Limit content length
-        if (content.length > 5000) {
-          content = content.substring(0, 5000) + "... (truncated)";
+        if (content.length > MAX_URL_CONTENT_LENGTH) {
+          content = content.substring(0, MAX_URL_CONTENT_LENGTH) + "... (truncated)";
         }
 
         const result = `Title: ${title}\n\n${content}`;
@@ -156,8 +157,8 @@ export class UrlFetcher {
         let content = await response.text();
 
         // Limit content length
-        if (content.length > 5000) {
-          content = content.substring(0, 5000) + "... (truncated)";
+        if (content.length > MAX_URL_CONTENT_LENGTH) {
+          content = content.substring(0, MAX_URL_CONTENT_LENGTH) + "... (truncated)";
         }
 
         // Cache the result
@@ -170,8 +171,8 @@ export class UrlFetcher {
 
         // Limit content length
         const limitedContent =
-          content.length > 5000
-            ? content.substring(0, 5000) + "... (truncated)"
+          content.length > MAX_URL_CONTENT_LENGTH
+            ? content.substring(0, MAX_URL_CONTENT_LENGTH) + "... (truncated)"
             : content;
 
         // Cache the result
