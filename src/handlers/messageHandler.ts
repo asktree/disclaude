@@ -6,7 +6,6 @@ import {
   Collection,
 } from "discord.js";
 import { ClaudeService } from "../services/claude";
-import { ContextManager } from "../services/contextManager";
 import { UrlFetcher } from "../services/urlFetcher";
 import { RepoReader } from "../services/repoReader";
 import { TokenCounter } from "../utils/tokenCounter";
@@ -15,7 +14,6 @@ import { config } from "../config";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
-  private contextManager: ContextManager;
   private urlFetcher: UrlFetcher;
   private repoReader: RepoReader;
   private tokenCounter: TokenCounter;
@@ -23,7 +21,6 @@ export class MessageHandler {
 
   constructor(botId: string) {
     this.claudeService = new ClaudeService();
-    this.contextManager = new ContextManager();
     this.urlFetcher = new UrlFetcher();
     this.repoReader = new RepoReader();
     this.tokenCounter = new TokenCounter();
@@ -37,23 +34,9 @@ export class MessageHandler {
     }
 
     const isMentioned = message.mentions.has(this.botId);
-    const isMonitoring = this.contextManager.isMonitoringChannel(
-      message.channelId
-    );
 
-    // Check if we should respond
-    if (!isMentioned && !isMonitoring) {
-      return;
-    }
-
-    // If mentioned, reset the follow-up count and start monitoring
-    if (isMentioned) {
-      this.contextManager.resetFollowUpCount(message.channelId);
-      this.contextManager.startMonitoring(message.channelId);
-    } else if (
-      isMonitoring &&
-      !this.contextManager.shouldRespond(message.channelId)
-    ) {
+    // Only respond if mentioned
+    if (!isMentioned) {
       return;
     }
 
@@ -63,11 +46,11 @@ export class MessageHandler {
         await message.channel.sendTyping();
       }
 
-      // Get message context
+      // Get message context - fetch recent messages from the channel
       const channel = message.channel as TextChannel | DMChannel | NewsChannel;
-      const contextMessages = await this.contextManager.getMessageContext(
-        channel
-      );
+      const contextMessages = await channel.messages.fetch({
+        limit: config.bot.maxContextMessages
+      });
 
       // Check if any messages have images
       const messagesArray = Array.from(contextMessages.values());
@@ -80,7 +63,13 @@ export class MessageHandler {
         console.log(`🔗 Found ${channelMentions.length} channel mention(s) in message`);
 
         for (const mention of channelMentions) {
-          const channelId = mention.replace(/<#|>/g, '');
+          // Safely extract channel ID from mention
+          const channelMatch = mention.match(/<#(\d+)>/);
+          if (!channelMatch || !channelMatch[1]) {
+            console.error(`   ❌ Invalid channel mention format: ${mention}`);
+            continue;
+          }
+          const channelId = channelMatch[1];
           try {
             // Fetch the mentioned channel
             const mentionedChannel = await message.client.channels.fetch(channelId);
@@ -194,73 +183,25 @@ export class MessageHandler {
       // Combine URL context and linked channel context
       const additionalContext = urlContext + linkedChannelContext;
 
-      // Determine if follow-up response is needed
-      if (isMonitoring && !isMentioned) {
-        // Add context about this being a follow-up
-        const lastMessage = formattedMessages[formattedMessages.length - 1];
-        const shouldRespondPrompt = `
-You are in a Discord conversation. Someone previously mentioned you, and you're monitoring for follow-up messages.
-The last message was: "${lastMessage.content}"
+      // Generate response for the mention
+      const response = await this.claudeService.generateResponse(
+        formattedMessages,
+        undefined,
+        additionalContext,
+        undefined,
+        true // Enable tools
+      );
 
-Decide if you should respond to continue the conversation. Only respond if:
-1. The message is directed at you or continues the conversation
-2. The message asks a question or needs clarification
-3. The user seems to expect a response
+      // Handle tool execution if needed
+      const finalResponse = await this.handleToolExecution(
+        response,
+        formattedMessages,
+        undefined,
+        additionalContext,
+        message
+      );
 
-If you decide not to respond, simply say "NO_RESPONSE".
-Otherwise, provide a helpful response.
-        `;
-
-        const response = await this.claudeService.generateResponse(
-          formattedMessages,
-          shouldRespondPrompt,
-          additionalContext,
-          undefined,
-          true // Enable tools
-        );
-
-        if (
-          typeof response === "string" &&
-          (response === "NO_RESPONSE" || response.includes("NO_RESPONSE"))
-        ) {
-          return;
-        }
-
-        // Increment follow-up count since we're responding
-        this.contextManager.incrementFollowUpCount(message.channelId);
-
-        // Handle tool execution if needed
-        const finalResponse = await this.handleToolExecution(
-          response,
-          formattedMessages,
-          undefined,
-          additionalContext,
-          message
-        );
-
-        // Send the response
-        await this.sendResponse(message, finalResponse);
-      } else if (isMentioned) {
-        // Direct mention - always use non-streaming
-        const response = await this.claudeService.generateResponse(
-          formattedMessages,
-          undefined,
-          additionalContext,
-          undefined,
-          true // Enable tools
-        );
-
-        // Handle tool execution if needed
-        const finalResponse = await this.handleToolExecution(
-          response,
-          formattedMessages,
-          undefined,
-          additionalContext,
-          message
-        );
-
-        await this.sendResponse(message, finalResponse);
-      }
+      await this.sendResponse(message, finalResponse);
     } catch (error) {
       console.error("Error handling message:", error);
       await message.reply(
