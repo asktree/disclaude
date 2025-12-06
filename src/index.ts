@@ -35,13 +35,11 @@ class DisclaudeBot {
       // Search all guilds for channels named "computer-buddy-zone"
       for (const guild of client.guilds.cache.values()) {
         const channel = guild.channels.cache.find(
-          (ch) => ch.name === "computer-buddy-zone" && ch.type === 0 // 0 = GUILD_TEXT channel type
+          (ch) => ch.name === "computer-buddy-zone" && ch.type === 0, // 0 = GUILD_TEXT channel type
         ) as TextChannel | undefined;
 
         if (channel) {
-          console.log(
-            `   📍 Found computer-buddy-zone in guild: ${guild.name}`
-          );
+          console.log(`   📍 Found computer-buddy-zone in guild: ${guild.name}`);
 
           // Generate the commit summary
           const summary = await generateCommitSummary(commitInfo);

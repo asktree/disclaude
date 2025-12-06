@@ -71,7 +71,7 @@ export class LRUCache<T> {
     this.cache.set(key, {
       value,
       timestamp: Date.now(),
-      size
+      size,
     });
     this.accessOrder.set(key, ++this.accessCounter);
     this.currentSize += size;
@@ -132,7 +132,9 @@ export class LRUCache<T> {
     while (this.currentSize + requiredSize > this.maxSize && this.cache.size > 0) {
       const lruKey = this.findLRUKey();
       if (lruKey) {
-        console.log(`🗑️ Cache eviction: Removing LRU entry '${lruKey}' (size: ${this.cache.get(lruKey)?.size || 0} bytes)`);
+        console.log(
+          `🗑️ Cache eviction: Removing LRU entry '${lruKey}' (size: ${this.cache.get(lruKey)?.size || 0} bytes)`,
+        );
         this.delete(lruKey);
       } else {
         break; // Safety check to avoid infinite loop
@@ -191,7 +193,7 @@ export class LRUCache<T> {
       sizeMB: this.currentSize / (1024 * 1024),
       maxSizeMB: this.maxSize / (1024 * 1024),
       utilizationPercent: (this.currentSize / this.maxSize) * 100,
-      oldestEntryAge: oldestAge
+      oldestEntryAge: oldestAge,
     };
   }
 }

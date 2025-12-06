@@ -8,7 +8,7 @@ import { Message } from "discord.js";
 export async function buildDiscordMessageRepresentation(
   msg: Message,
   botId: string,
-  includeContent: boolean = true
+  includeContent: boolean = true,
 ): Promise<string> {
   // For assistant messages, just return the content without any metadata
   if (msg.author.id === botId) {
@@ -56,11 +56,7 @@ export async function buildDiscordMessageRepresentation(
   if (includeContent) {
     if (msg.content) {
       content += `: ${msg.content}`;
-    } else if (
-      msg.attachments.size === 0 &&
-      msg.embeds.length === 0 &&
-      msg.stickers.size === 0
-    ) {
+    } else if (msg.attachments.size === 0 && msg.embeds.length === 0 && msg.stickers.size === 0) {
       content += ": [No text content]";
     } else {
       content += ":"; // Just username for attachment-only messages
@@ -113,23 +109,19 @@ export async function buildDiscordMessageRepresentation(
     content += `\n  🔗 Embeds (${msg.embeds.length}):`;
     for (const embed of msg.embeds) {
       if (embed.title) content += `\n    • Title: ${embed.title}`;
-      if (embed.description)
-        content += `\n      Description: ${embed.description}`;
+      if (embed.description) content += `\n      Description: ${embed.description}`;
       if (embed.url) content += `\n      URL: ${embed.url}`;
-      if (embed.author?.name)
-        content += `\n      Author: ${embed.author.name}`;
-      if (embed.thumbnail?.url)
-        content += `\n      Thumbnail: ${embed.thumbnail.url}`;
+      if (embed.author?.name) content += `\n      Author: ${embed.author.name}`;
+      if (embed.thumbnail?.url) content += `\n      Thumbnail: ${embed.thumbnail.url}`;
       if (embed.image?.url) content += `\n      Image: ${embed.image.url}`;
       if (embed.video?.url) content += `\n      Video: ${embed.video.url}`;
-      if (embed.footer?.text)
-        content += `\n      Footer: ${embed.footer.text}`;
+      if (embed.footer?.text) content += `\n      Footer: ${embed.footer.text}`;
       if (embed.fields.length > 0) {
         content += `\n      Fields (${embed.fields.length}):`;
         for (const field of embed.fields) {
           content += `\n        - ${field.name}: ${field.value.substring(
             0,
-            50
+            50,
           )}${field.value.length > 50 ? "..." : ""}`;
         }
       }
@@ -165,9 +157,7 @@ export async function buildDiscordMessageRepresentation(
     const poll = (msg as any).poll;
     content += `\n  📊 Poll: ${poll.question}`;
     if (poll.answers) {
-      content += `\n    Options: ${poll.answers
-        .map((a: any) => a.text)
-        .join(", ")}`;
+      content += `\n    Options: ${poll.answers.map((a: any) => a.text).join(", ")}`;
     }
   }
 
@@ -197,8 +187,7 @@ export async function buildDiscordMessageRepresentation(
     if (msg.flags.has("Crossposted")) flagNames.push("Crossposted");
     if (msg.flags.has("IsCrosspost")) flagNames.push("Is Crosspost");
     if (msg.flags.has("SuppressEmbeds")) flagNames.push("Embeds Suppressed");
-    if (msg.flags.has("SourceMessageDeleted"))
-      flagNames.push("Source Deleted");
+    if (msg.flags.has("SourceMessageDeleted")) flagNames.push("Source Deleted");
     if (msg.flags.has("Urgent")) flagNames.push("Urgent");
     if (msg.flags.has("HasThread")) flagNames.push("Has Thread");
     if (msg.flags.has("Ephemeral")) flagNames.push("Ephemeral");

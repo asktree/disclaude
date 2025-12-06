@@ -5,7 +5,7 @@ import {
   URL_CACHE_TTL_MS,
   MAX_IMAGE_SIZE_MB,
   URL_CACHE_MAX_SIZE_MB,
-  CACHE_CLEANUP_INTERVAL_MS
+  CACHE_CLEANUP_INTERVAL_MS,
 } from "../constants";
 import { FetchedUrl, UrlCacheEntry, ClaudeContent } from "../types";
 import { LRUCache } from "../utils/cache";
@@ -22,7 +22,9 @@ export class UrlFetcher {
     this.cleanupInterval = setInterval(() => {
       const statsBefore = this.urlCache.getStats();
       if (statsBefore.count > 0) {
-        console.log(`🧹 Running cache cleanup - Current: ${statsBefore.count} entries, ${statsBefore.sizeMB.toFixed(2)}MB`);
+        console.log(
+          `🧹 Running cache cleanup - Current: ${statsBefore.count} entries, ${statsBefore.sizeMB.toFixed(2)}MB`,
+        );
         // Getting an item triggers expiration check
         const keys = this.urlCache.getKeys();
         for (const key of keys) {
@@ -53,7 +55,9 @@ export class UrlFetcher {
       if (cached) {
         console.log(`📦 Using cached content for ${url}`);
         const stats = this.urlCache.getStats();
-        console.log(`   Cache stats: ${stats.count} entries, ${stats.sizeMB.toFixed(2)}MB / ${stats.maxSizeMB}MB (${stats.utilizationPercent.toFixed(1)}%)`);
+        console.log(
+          `   Cache stats: ${stats.count} entries, ${stats.sizeMB.toFixed(2)}MB / ${stats.maxSizeMB}MB (${stats.utilizationPercent.toFixed(1)}%)`,
+        );
         return { url, content: cached.content, isImage: cached.isImage };
       }
 
@@ -84,9 +88,7 @@ export class UrlFetcher {
         if (sizeMB > MAX_IMAGE_SIZE_MB) {
           return {
             url,
-            content: `Image too large to process (${sizeMB.toFixed(
-              2
-            )}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
+            content: `Image too large to process (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
             isImage: true,
           };
         }
@@ -96,12 +98,7 @@ export class UrlFetcher {
 
         // Determine the media type for Claude
         let mediaType = contentType;
-        const supportedImageTypes = [
-          "image/jpeg",
-          "image/png",
-          "image/gif",
-          "image/webp",
-        ];
+        const supportedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
         // If unsupported type, try to infer from URL extension
         if (!supportedImageTypes.includes(contentType)) {
@@ -137,11 +134,7 @@ export class UrlFetcher {
           isImage: true,
         });
 
-        console.log(
-          `✅ Successfully fetched image: ${url} (${sizeMB.toFixed(
-            2
-          )}MB, ${mediaType})`
-        );
+        console.log(`✅ Successfully fetched image: ${url} (${sizeMB.toFixed(2)}MB, ${mediaType})`);
         return { url, content: imageContent, isImage: true };
       }
 
@@ -242,9 +235,7 @@ export class UrlFetcher {
     // Limit to 5 URLs to avoid overwhelming the context
     const limitedUrls = urls.slice(0, 5);
 
-    const results = await Promise.all(
-      limitedUrls.map((url) => this.fetchUrl(url))
-    );
+    const results = await Promise.all(limitedUrls.map((url) => this.fetchUrl(url)));
 
     return results;
   }

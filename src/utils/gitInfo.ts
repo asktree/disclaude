@@ -113,13 +113,13 @@ async function getCommitFromGit(): Promise<GitCommitInfo | null> {
 
     // Get basic commit info
     const { stdout: commitInfo } = await execAsync(
-      'git log -1 --pretty=format:"%H|%h|%s|%an|%ad" --date=short'
+      'git log -1 --pretty=format:"%H|%h|%s|%an|%ad" --date=short',
     );
     const [hash, shortHash, message, author, date] = commitInfo.split("|");
 
     // Get changed files and stats
     const { stdout: diffStat } = await execAsync(
-      "git diff-tree --no-commit-id --name-only -r HEAD"
+      "git diff-tree --no-commit-id --name-only -r HEAD",
     );
     const filesChanged = diffStat.split("\n").filter((file) => file.length > 0);
 
@@ -190,11 +190,8 @@ function constructGitHubUrl(remoteUrl: string, commitHash: string): string {
  * Generate a commit summary by using Claude to analyze the diffs
  * This sends the actual code changes to Claude for intelligent analysis
  */
-export async function generateCommitSummary(
-  commitInfo: GitCommitInfo
-): Promise<string> {
-  const { message, filesChanged, fileDetails, insertions, deletions } =
-    commitInfo;
+export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<string> {
+  const { message, filesChanged, fileDetails, insertions, deletions } = commitInfo;
 
   // Compact stats line
   const statsLine = `*📝 ${filesChanged.length} files | +${insertions}/-${deletions}*`;
@@ -247,14 +244,11 @@ Also: If (AND ONLY IF!!!!) you spot any critical issues, add a line starting wit
       ],
     });
 
-    const summary =
-      response.content[0].type === "text" ? response.content[0].text : "";
+    const summary = response.content[0].type === "text" ? response.content[0].text : "";
     return `**${message}**\n\n${statsLine}\n\n${summary}`;
   } catch (error) {
     console.error("Failed to generate AI summary:", error);
     // Fallback to basic summary if API fails
-    return `**${message}**\n\n${statsLine}\n\nFiles changed: ${filesChanged.join(
-      ", "
-    )}`;
+    return `**${message}**\n\n${statsLine}\n\nFiles changed: ${filesChanged.join(", ")}`;
   }
 }

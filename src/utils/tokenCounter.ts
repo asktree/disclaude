@@ -1,6 +1,6 @@
-import { encoding_for_model, TiktokenModel, Tiktoken } from '@dqbd/tiktoken';
-import { IMAGE_ESTIMATED_TOKENS } from '../constants';
-import { ClaudeMessage } from '../types';
+import { encoding_for_model, TiktokenModel, Tiktoken } from "@dqbd/tiktoken";
+import { IMAGE_ESTIMATED_TOKENS } from "../constants";
+import { ClaudeMessage } from "../types";
 
 export class TokenCounter {
   private encoder: Tiktoken;
@@ -8,7 +8,7 @@ export class TokenCounter {
   constructor() {
     // Use cl100k_base encoding (used by GPT-4 and Claude models)
     // This is a reasonable approximation for Claude's tokenization
-    this.encoder = encoding_for_model('gpt-4' as TiktokenModel);
+    this.encoder = encoding_for_model("gpt-4" as TiktokenModel);
   }
 
   countTokens(text: string): number {
@@ -16,7 +16,7 @@ export class TokenCounter {
       const tokens = this.encoder.encode(text);
       return tokens.length;
     } catch (error) {
-      console.error('Error counting tokens:', error);
+      console.error("Error counting tokens:", error);
       // Fallback to rough estimation (1 token ≈ 4 characters)
       return Math.ceil(text.length / 4);
     }
@@ -33,14 +33,14 @@ export class TokenCounter {
       totalTokens += this.countTokens(message.role);
 
       // Count content tokens
-      if (typeof message.content === 'string') {
+      if (typeof message.content === "string") {
         totalTokens += this.countTokens(message.content);
       } else if (Array.isArray(message.content)) {
         // Handle multimodal content
         for (const block of message.content) {
-          if (block.type === 'text') {
-            totalTokens += this.countTokens(block.text || '');
-          } else if (block.type === 'image') {
+          if (block.type === "text") {
+            totalTokens += this.countTokens(block.text || "");
+          } else if (block.type === "image") {
             // Images typically consume ~1000-2000 tokens depending on size
             // Use a conservative estimate
             totalTokens += IMAGE_ESTIMATED_TOKENS;
@@ -55,7 +55,7 @@ export class TokenCounter {
   trimMessagesToTokenLimit(
     messages: ClaudeMessage[],
     maxTokens: number,
-    preserveLatest: number = 5
+    preserveLatest: number = 5,
   ): ClaudeMessage[] {
     if (messages.length <= preserveLatest) {
       return messages;
@@ -85,7 +85,7 @@ export class TokenCounter {
     if (trimmedMessages.length < olderMessages.length) {
       const skippedCount = olderMessages.length - trimmedMessages.length;
       trimmedMessages.unshift({
-        role: 'user',
+        role: "user",
         content: `[Context Note: ${skippedCount} earlier messages were trimmed to fit token limit]`,
       });
     }
@@ -93,15 +93,18 @@ export class TokenCounter {
     return [...trimmedMessages, ...latestMessages];
   }
 
-  estimateTokenCost(tokens: number, model: string = 'claude-3-haiku'): { input: number; output: number } {
+  estimateTokenCost(
+    tokens: number,
+    model: string = "claude-3-haiku",
+  ): { input: number; output: number } {
     // Rough cost estimates per million tokens (as of 2024)
     const costs: Record<string, { input: number; output: number }> = {
-      'claude-3-haiku': { input: 0.25, output: 1.25 },
-      'claude-3-5-sonnet': { input: 3.0, output: 15.0 },
-      'claude-3-opus': { input: 15.0, output: 75.0 },
+      "claude-3-haiku": { input: 0.25, output: 1.25 },
+      "claude-3-5-sonnet": { input: 3.0, output: 15.0 },
+      "claude-3-opus": { input: 15.0, output: 75.0 },
     };
 
-    const modelCost = costs[model] || costs['claude-3-haiku'];
+    const modelCost = costs[model] || costs["claude-3-haiku"];
 
     return {
       input: (tokens / 1_000_000) * modelCost.input,

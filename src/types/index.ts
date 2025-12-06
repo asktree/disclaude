@@ -2,7 +2,7 @@
  * Type definitions for the Disclaude Discord bot
  */
 
-import { Attachment } from 'discord.js';
+import { Attachment } from "discord.js";
 
 // Claude API related types
 export interface ClaudeMessage {
@@ -10,20 +10,18 @@ export interface ClaudeMessage {
   content: string | ClaudeContent[] | any[]; // Allow broader content types
 }
 
-export type ClaudeContent =
-  | ClaudeTextContent
-  | ClaudeImageContent;
+export type ClaudeContent = ClaudeTextContent | ClaudeImageContent;
 
 export interface ClaudeTextContent {
-  type: 'text';
+  type: "text";
   text: string;
 }
 
 export interface ClaudeImageContent {
-  type: 'image';
+  type: "image";
   source: {
-    type: 'base64';
-    media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' | string; // Allow specific types but also general string
+    type: "base64";
+    media_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | string; // Allow specific types but also general string
     data: string;
   };
 }
@@ -109,7 +107,7 @@ export interface ChannelFetchError {
 
 // Claude content block types (from API responses)
 export interface ClaudeTextBlock {
-  type: 'text';
+  type: "text";
   text: string;
   citations?: Citation[];
 }
@@ -120,19 +118,19 @@ export interface Citation {
 }
 
 export interface ClaudeToolUseBlock {
-  type: 'tool_use' | 'server_tool_use';
+  type: "tool_use" | "server_tool_use";
   id: string;
   name: string;
   input?: Record<string, unknown>;
 }
 
 export interface ClaudeWebSearchResult {
-  type: 'web_search_tool_result';
+  type: "web_search_tool_result";
   content: WebSearchItem[];
 }
 
 export interface WebSearchItem {
-  type: 'web_search_result';
+  type: "web_search_result";
   url?: string;
   title?: string;
   snippet?: string;
@@ -140,7 +138,7 @@ export interface WebSearchItem {
 }
 
 export interface ClaudeCodeExecutionResult {
-  type: 'text_editor_code_execution_tool_result' | 'bash_code_execution_tool_result';
+  type: "text_editor_code_execution_tool_result" | "bash_code_execution_tool_result";
   tool_use_id?: string;
   output?: string;
   error?: string;
@@ -148,7 +146,7 @@ export interface ClaudeCodeExecutionResult {
 }
 
 // Discord attachment with proper types
-export interface ProcessableAttachment extends Omit<Attachment, 'contentType'> {
+export interface ProcessableAttachment extends Omit<Attachment, "contentType"> {
   name: string;
   url: string;
   contentType?: string | null;

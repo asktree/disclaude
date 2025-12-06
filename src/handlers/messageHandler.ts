@@ -1,10 +1,4 @@
-import {
-  Message,
-  TextChannel,
-  DMChannel,
-  NewsChannel,
-  Collection,
-} from "discord.js";
+import { Message, TextChannel, DMChannel, NewsChannel, Collection } from "discord.js";
 import { ClaudeService } from "../services/claude";
 import { UrlFetcher } from "../services/urlFetcher";
 import { RepoReader } from "../services/repoReader";
@@ -19,7 +13,7 @@ import {
   MAX_RECENT_MESSAGES_FOR_URL_SEARCH,
   DEFAULT_DISCORD_MESSAGES_LIMIT,
   MAX_DISCORD_MESSAGES_LIMIT,
-  MAX_CODE_OUTPUT_LENGTH
+  MAX_CODE_OUTPUT_LENGTH,
 } from "../constants";
 import {
   ClaudeMessage,
@@ -30,7 +24,7 @@ import {
   ChannelFetchResult,
   ChannelFetchError,
   FetchedUrl,
-  ReadDiscordMessagesInput
+  ReadDiscordMessagesInput,
 } from "../types";
 
 export class MessageHandler {
@@ -70,7 +64,7 @@ export class MessageHandler {
       // Get message context - fetch recent messages from the channel
       const channel = message.channel as TextChannel | DMChannel | NewsChannel;
       const contextMessages = await channel.messages.fetch({
-        limit: config.bot.maxContextMessages
+        limit: config.bot.maxContextMessages,
       });
 
       // Check if any messages have images
@@ -100,41 +94,49 @@ export class MessageHandler {
         const MAX_CONCURRENT_FETCHES = 3;
         const channelsToFetch = channelIds.slice(0, MAX_CONCURRENT_FETCHES);
         if (channelIds.length > MAX_CONCURRENT_FETCHES) {
-          console.log(`   ⚠️ Limiting to first ${MAX_CONCURRENT_FETCHES} channels (${channelIds.length} mentioned)`);
+          console.log(
+            `   ⚠️ Limiting to first ${MAX_CONCURRENT_FETCHES} channels (${channelIds.length} mentioned)`,
+          );
         }
 
         // Fetch all channels concurrently
-        const channelPromises = channelsToFetch.map(async (channelId): Promise<ChannelFetchResult | ChannelFetchError | null> => {
-          try {
-            const mentionedChannel = await message.client.channels.fetch(channelId);
+        const channelPromises = channelsToFetch.map(
+          async (channelId): Promise<ChannelFetchResult | ChannelFetchError | null> => {
+            try {
+              const mentionedChannel = await message.client.channels.fetch(channelId);
 
-            if (mentionedChannel && 'messages' in mentionedChannel) {
-              console.log(`   📖 Fetching from #${(mentionedChannel as TextChannel).name}`);
+              if (mentionedChannel && "messages" in mentionedChannel) {
+                console.log(`   📖 Fetching from #${(mentionedChannel as TextChannel).name}`);
 
-              // Fetch messages
-              const messages = await (mentionedChannel as TextChannel).messages.fetch({ limit: MAX_CHANNEL_FETCH_LIMIT });
-              const messageArray = Array.from(messages.values()).reverse();
+                // Fetch messages
+                const messages = await (mentionedChannel as TextChannel).messages.fetch({
+                  limit: MAX_CHANNEL_FETCH_LIMIT,
+                });
+                const messageArray = Array.from(messages.values()).reverse();
 
-              // Format messages concurrently
-              const formattedMessages = await Promise.all(
-                messageArray.map(msg => buildDiscordMessageRepresentation(msg, this.botId, true))
-              );
+                // Format messages concurrently
+                const formattedMessages = await Promise.all(
+                  messageArray.map((msg) =>
+                    buildDiscordMessageRepresentation(msg, this.botId, true),
+                  ),
+                );
 
+                return {
+                  channelName: (mentionedChannel as TextChannel).name,
+                  channelId,
+                  content: formattedMessages.join("\n\n"),
+                };
+              }
+              return null;
+            } catch (error) {
+              console.error(`   ❌ Failed to fetch channel ${channelId}:`, error);
               return {
-                channelName: (mentionedChannel as TextChannel).name,
                 channelId,
-                content: formattedMessages.join("\n\n")
+                error: error instanceof Error ? error.message : String(error),
               };
             }
-            return null;
-          } catch (error) {
-            console.error(`   ❌ Failed to fetch channel ${channelId}:`, error);
-            return {
-              channelId,
-              error: error instanceof Error ? error.message : String(error)
-            };
-          }
-        });
+          },
+        );
 
         // Wait for all channel fetches to complete
         const channelResults = await Promise.all(channelPromises);
@@ -142,7 +144,7 @@ export class MessageHandler {
         // Build the context string
         for (const result of channelResults) {
           if (result) {
-            if ('error' in result) {
+            if ("error" in result) {
               linkedChannelContext += `\n\n[Failed to fetch messages from channel ${result.channelId}: ${result.error}]\n`;
             } else if (result.content) {
               linkedChannelContext += `\n\n=== Automatically fetched from mentioned channel #${result.channelName} (ID: ${result.channelId}) ===\n\n`;
@@ -157,43 +159,40 @@ export class MessageHandler {
           Array.from(msg.attachments.values()).some(
             (att) =>
               att.contentType?.startsWith("image/") ||
-              att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
-          )
+              att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i),
+          ),
       );
 
       // Format messages for Claude (with images if present)
       let formattedMessages: ClaudeMessage[];
       if (hasImages) {
         console.log("📸 Found images in message history, processing...");
-        formattedMessages =
-          await this.claudeService.formatDiscordMessagesWithImages(
-            messagesArray,
-            this.botId
-          );
+        formattedMessages = await this.claudeService.formatDiscordMessagesWithImages(
+          messagesArray,
+          this.botId,
+        );
       } else {
         formattedMessages = await this.claudeService.formatDiscordMessages(
           messagesArray,
-          this.botId
+          this.botId,
         );
       }
 
       // Apply token-based context trimming
-      const initialTokenCount =
-        this.tokenCounter.countMessageTokens(formattedMessages);
+      const initialTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
       console.log(
-        `📊 Initial context: ${formattedMessages.length} messages, ${initialTokenCount} tokens`
+        `📊 Initial context: ${formattedMessages.length} messages, ${initialTokenCount} tokens`,
       );
 
       if (initialTokenCount > config.bot.maxContextTokens) {
         formattedMessages = this.tokenCounter.trimMessagesToTokenLimit(
           formattedMessages,
           config.bot.maxContextTokens,
-          MIN_PRESERVED_MESSAGES // Preserve at least the last 10 messages
+          MIN_PRESERVED_MESSAGES, // Preserve at least the last 10 messages
         );
-        const trimmedTokenCount =
-          this.tokenCounter.countMessageTokens(formattedMessages);
+        const trimmedTokenCount = this.tokenCounter.countMessageTokens(formattedMessages);
         console.log(
-          `✂️ Trimmed to ${formattedMessages.length} messages, ${trimmedTokenCount} tokens`
+          `✂️ Trimmed to ${formattedMessages.length} messages, ${trimmedTokenCount} tokens`,
         );
       }
 
@@ -219,16 +218,11 @@ export class MessageHandler {
         }
 
         if (mostRecentUrl) {
-          console.log(
-            `🔗 Fetching most recent URL from last 5 messages: ${mostRecentUrl}`
-          );
-          const urlContents = await this.urlFetcher.fetchAllUrls([
-            mostRecentUrl,
-          ]);
+          console.log(`🔗 Fetching most recent URL from last 5 messages: ${mostRecentUrl}`);
+          const urlContents = await this.urlFetcher.fetchAllUrls([mostRecentUrl]);
 
           if (urlContents.length > 0) {
-            urlContext =
-              "\n\nContent from the most recent URL in conversation:\n\n";
+            urlContext = "\n\nContent from the most recent URL in conversation:\n\n";
             urlContext += `\n--- ${urlContents[0].url} ---\n${urlContents[0].content}\n---\n`;
           }
         } else {
@@ -245,7 +239,7 @@ export class MessageHandler {
         undefined,
         additionalContext,
         undefined,
-        true // Enable tools
+        true, // Enable tools
       );
 
       // Handle tool execution if needed
@@ -254,15 +248,13 @@ export class MessageHandler {
         formattedMessages,
         undefined,
         additionalContext,
-        message
+        message,
       );
 
       await this.sendResponse(message, finalResponse);
     } catch (error) {
       console.error("Error handling message:", error);
-      await message.reply(
-        "Sorry, I encountered an error processing your message."
-      );
+      await message.reply("Sorry, I encountered an error processing your message.");
     }
   }
 
@@ -272,7 +264,7 @@ export class MessageHandler {
     systemPrompt?: string,
     urlContext?: string,
     originalMessage?: Message,
-    maxRounds: number = MAX_TOOL_ROUNDS
+    maxRounds: number = MAX_TOOL_ROUNDS,
   ): Promise<string | { text: string; files: GeneratedFile[] }> {
     let currentResponse = response;
     let roundCount = 0;
@@ -285,14 +277,14 @@ export class MessageHandler {
           console.log("💬 Claude responded with text (no tools needed)");
         } else {
           console.log(
-            `✨ Claude generated final response after ${roundCount} round(s) of tool use`
+            `✨ Claude generated final response after ${roundCount} round(s) of tool use`,
           );
         }
         return currentResponse;
       }
 
       // If it's a response with files, we're done!
-      if ('text' in currentResponse && 'files' in currentResponse) {
+      if ("text" in currentResponse && "files" in currentResponse) {
         console.log(`📎 Claude generated response with ${currentResponse.files.length} file(s)`);
         return currentResponse;
       }
@@ -301,7 +293,7 @@ export class MessageHandler {
       if (currentResponse.needsTools) {
         roundCount++;
         console.log(
-          `\n🤖 [Round ${roundCount}] Claude wants to use ${currentResponse.toolCalls.length} tool(s)`
+          `\n🤖 [Round ${roundCount}] Claude wants to use ${currentResponse.toolCalls.length} tool(s)`,
         );
         const toolResults: ClaudeToolResult[] = [];
 
@@ -318,20 +310,18 @@ export class MessageHandler {
               console.log(
                 `   📖 Reading source code: ${
                   files.length === 0 ? "repository structure" : files.join(", ")
-                }`
+                }`,
               );
 
               // Send initial status message to Discord
               if (originalMessage && "send" in originalMessage.channel) {
                 if (files.length === 0) {
                   statusMessage = await originalMessage.channel.send(
-                    `📂 *Getting repository structure...*`
+                    `📂 *Getting repository structure...*`,
                   );
                 } else {
                   statusMessage = await originalMessage.channel.send(
-                    `📖 *Reading ${files.length} source file${
-                      files.length !== 1 ? "s" : ""
-                    }...*`
+                    `📖 *Reading ${files.length} source file${files.length !== 1 ? "s" : ""}...*`,
                   );
                 }
               }
@@ -345,9 +335,7 @@ export class MessageHandler {
               } else {
                 // Read specific files
                 for (const filePath of files) {
-                  const content = await this.repoReader.getFileContent(
-                    filePath
-                  );
+                  const content = await this.repoReader.getFileContent(filePath);
                   sourceContent += `\n--- ${filePath} ---\n\`\`\`typescript\n${content}\n\`\`\`\n`;
                 }
                 console.log(`   ✅ Loaded ${files.length} source file(s)`);
@@ -359,9 +347,7 @@ export class MessageHandler {
                   await statusMessage.edit(`✅ *Repository structure loaded*`);
                 } else {
                   await statusMessage.edit(
-                    `✅ *Loaded ${files.length} file${
-                      files.length !== 1 ? "s" : ""
-                    }*`
+                    `✅ *Loaded ${files.length} file${files.length !== 1 ? "s" : ""}*`,
                   );
                 }
               }
@@ -375,13 +361,9 @@ export class MessageHandler {
 
               // Edit status message to show error
               if (statusMessage) {
-                await statusMessage.edit(
-                  `⚠️ *Failed to read source code: ${error}*`
-                );
+                await statusMessage.edit(`⚠️ *Failed to read source code: ${error}*`);
               } else if (originalMessage && "send" in originalMessage.channel) {
-                await originalMessage.channel.send(
-                  `⚠️ *Failed to read source code: ${error}*`
-                );
+                await originalMessage.channel.send(`⚠️ *Failed to read source code: ${error}*`);
               }
 
               toolResults.push({
@@ -398,7 +380,7 @@ export class MessageHandler {
               // Send initial status message to Discord
               if (originalMessage && "send" in originalMessage.channel) {
                 statusMessage = await originalMessage.channel.send(
-                  `🔗 *Fetching content from ${url}...*`
+                  `🔗 *Fetching content from ${url}...*`,
                 );
               }
 
@@ -428,9 +410,7 @@ export class MessageHandler {
 
                   // Edit the status message to show completion
                   if (statusMessage) {
-                    await statusMessage.edit(
-                      `✅ *Fetched content from ${url}*`
-                    );
+                    await statusMessage.edit(`✅ *Fetched content from ${url}*`);
                   }
                 }
               } else {
@@ -439,9 +419,7 @@ export class MessageHandler {
 
                 // Edit status message to show failure
                 if (statusMessage) {
-                  await statusMessage.edit(
-                    `⚠️ *Failed to fetch content from ${url}*`
-                  );
+                  await statusMessage.edit(`⚠️ *Failed to fetch content from ${url}*`);
                 }
               }
 
@@ -456,9 +434,7 @@ export class MessageHandler {
               if (statusMessage) {
                 await statusMessage.edit(`⚠️ *Failed to fetch URL: ${error}*`);
               } else if (originalMessage && "send" in originalMessage.channel) {
-                await originalMessage.channel.send(
-                  `⚠️ *Failed to fetch URL: ${error}*`
-                );
+                await originalMessage.channel.send(`⚠️ *Failed to fetch URL: ${error}*`);
               }
 
               toolResults.push({
@@ -482,13 +458,11 @@ export class MessageHandler {
               const targetChannelId = channel_id || originalMessage?.channelId;
 
               if (!targetChannelId) {
-                throw new Error(
-                  "No channel ID provided and current channel not available"
-                );
+                throw new Error("No channel ID provided and current channel not available");
               }
 
               console.log(
-                `   📜 Reading Discord messages from channel ${targetChannelId} (limit: ${limit})`
+                `   📜 Reading Discord messages from channel ${targetChannelId} (limit: ${limit})`,
               );
 
               // Send initial status message to Discord
@@ -496,7 +470,7 @@ export class MessageHandler {
                 statusMessage = await originalMessage.channel.send(
                   `📜 *Reading ${limit} messages from ${
                     channel_id ? `channel <#${channel_id}>` : "this channel"
-                  }...*`
+                  }...*`,
                 );
               }
 
@@ -507,13 +481,9 @@ export class MessageHandler {
               }
 
               // Fetch the channel
-              const targetChannel = await client.channels.fetch(
-                targetChannelId
-              );
+              const targetChannel = await client.channels.fetch(targetChannelId);
               if (!targetChannel || !("messages" in targetChannel)) {
-                throw new Error(
-                  `Channel ${targetChannelId} not found or not a text channel`
-                );
+                throw new Error(`Channel ${targetChannelId} not found or not a text channel`);
               }
 
               // Build fetch options for Discord API
@@ -523,23 +493,20 @@ export class MessageHandler {
                 after?: string;
                 around?: string;
               }
-              const fetchOptions: FetchOptions = { limit: Math.min(limit, MAX_DISCORD_MESSAGES_LIMIT) };
+              const fetchOptions: FetchOptions = {
+                limit: Math.min(limit, MAX_DISCORD_MESSAGES_LIMIT),
+              };
               if (before_message_id) fetchOptions.before = before_message_id;
               if (after_message_id) fetchOptions.after = after_message_id;
               if (around_message_id) fetchOptions.around = around_message_id;
 
               // Fetch messages
-              const messages = (await (
-                targetChannel as TextChannel
-              ).messages.fetch(fetchOptions)) as unknown as Collection<
-                string,
-                Message
-              >;
+              const messages = (await (targetChannel as TextChannel).messages.fetch(
+                fetchOptions,
+              )) as unknown as Collection<string, Message>;
 
               // Convert to array and reverse to get chronological order
-              const messageArray = Array.from(
-                messages.values()
-              ).reverse() as Message[];
+              const messageArray = Array.from(messages.values()).reverse() as Message[];
 
               console.log(`   ✅ Fetched ${messageArray.length} messages`);
 
@@ -551,8 +518,8 @@ export class MessageHandler {
                   Array.from(msg.attachments.values()).some(
                     (att) =>
                       att.contentType?.startsWith("image/") ||
-                      att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
-                  )
+                      att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i),
+                  ),
               );
 
               // Add channel information to the content
@@ -560,11 +527,10 @@ export class MessageHandler {
 
               if (hasImages) {
                 console.log("   📸 Found images in fetched messages");
-                const formatted =
-                  await this.claudeService.formatDiscordMessagesWithImages(
-                    messageArray,
-                    this.botId
-                  );
+                const formatted = await this.claudeService.formatDiscordMessagesWithImages(
+                  messageArray,
+                  this.botId,
+                );
                 // Convert formatted messages to text (already includes rich metadata)
                 for (const msg of formatted) {
                   if (typeof msg.content === "string") {
@@ -575,9 +541,7 @@ export class MessageHandler {
                       .filter((c: any) => c.type === "text")
                       .map((c: any) => c.text)
                       .join("");
-                    const imageParts = msg.content.filter(
-                      (c: any) => c.type === "image"
-                    ).length;
+                    const imageParts = msg.content.filter((c: any) => c.type === "image").length;
 
                     formattedContent += textParts;
                     if (imageParts > 0) {
@@ -590,7 +554,7 @@ export class MessageHandler {
                 // Simple text formatting (already includes rich metadata)
                 const formatted = await this.claudeService.formatDiscordMessages(
                   messageArray,
-                  this.botId
+                  this.botId,
                 );
                 for (const msg of formatted) {
                   formattedContent += msg.content + "\n\n";
@@ -602,7 +566,7 @@ export class MessageHandler {
                 await statusMessage.edit(
                   `✅ *Read ${messageArray.length} messages from ${
                     channel_id ? `<#${channel_id}>` : "this channel"
-                  }*`
+                  }*`,
                 );
               }
 
@@ -615,12 +579,10 @@ export class MessageHandler {
 
               // Edit status message to show error
               if (statusMessage) {
-                await statusMessage.edit(
-                  `⚠️ *Failed to read Discord messages: ${error}*`
-                );
+                await statusMessage.edit(`⚠️ *Failed to read Discord messages: ${error}*`);
               } else if (originalMessage && "send" in originalMessage.channel) {
                 await originalMessage.channel.send(
-                  `⚠️ *Failed to read Discord messages: ${error}*`
+                  `⚠️ *Failed to read Discord messages: ${error}*`,
                 );
               }
 
@@ -637,13 +599,13 @@ export class MessageHandler {
               console.log(
                 `   📋 Listing Discord channels${
                   guild_id ? ` from guild ${guild_id}` : " from current guild"
-                }`
+                }`,
               );
 
               // Send initial status message to Discord
               if (originalMessage && "send" in originalMessage.channel) {
                 statusMessage = await originalMessage.channel.send(
-                  `📋 *Listing available channels...*`
+                  `📋 *Listing available channels...*`,
                 );
               }
 
@@ -663,9 +625,7 @@ export class MessageHandler {
               } else if (originalMessage?.guild) {
                 targetGuild = originalMessage.guild;
               } else {
-                throw new Error(
-                  "No guild specified and current message is not from a guild"
-                );
+                throw new Error("No guild specified and current message is not from a guild");
               }
 
               // Get all channels from the guild
@@ -701,10 +661,10 @@ export class MessageHandler {
 
               // Format output
               const channelTypeMap: { [key: number]: string } = {
-                0: "📝",  // Text
-                2: "🔊",  // Voice
-                4: "📁",  // Category
-                5: "📢",  // Announcement
+                0: "📝", // Text
+                2: "🔊", // Voice
+                4: "📁", // Category
+                5: "📢", // Announcement
                 13: "🎭", // Stage
                 15: "💬", // Forum
               };
@@ -742,7 +702,7 @@ export class MessageHandler {
               // Edit the status message to show completion
               if (statusMessage) {
                 await statusMessage.edit(
-                  `✅ *Listed ${channels.size} channels from ${targetGuild.name}*`
+                  `✅ *Listed ${channels.size} channels from ${targetGuild.name}*`,
                 );
               }
 
@@ -755,12 +715,10 @@ export class MessageHandler {
 
               // Edit status message to show error
               if (statusMessage) {
-                await statusMessage.edit(
-                  `⚠️ *Failed to list Discord channels: ${error}*`
-                );
+                await statusMessage.edit(`⚠️ *Failed to list Discord channels: ${error}*`);
               } else if (originalMessage && "send" in originalMessage.channel) {
                 await originalMessage.channel.send(
-                  `⚠️ *Failed to list Discord channels: ${error}*`
+                  `⚠️ *Failed to list Discord channels: ${error}*`,
                 );
               }
 
@@ -790,9 +748,7 @@ export class MessageHandler {
           content: toolResultContent,
         });
 
-        console.log(
-          `\n🔄 [Round ${roundCount}] Sending tool results back to Claude...`
-        );
+        console.log(`\n🔄 [Round ${roundCount}] Sending tool results back to Claude...`);
 
         // Send thinking message to Discord
         if (originalMessage && "send" in originalMessage.channel) {
@@ -805,7 +761,7 @@ export class MessageHandler {
           systemPrompt,
           urlContext,
           undefined,
-          true // Keep tools enabled so Claude can use them again if needed
+          true, // Keep tools enabled so Claude can use them again if needed
         );
       } else {
         // Unexpected format
@@ -814,9 +770,7 @@ export class MessageHandler {
     }
 
     // Hit max rounds
-    console.log(
-      `⚠️ Reached maximum tool rounds (${maxRounds}), forcing final response...`
-    );
+    console.log(`⚠️ Reached maximum tool rounds (${maxRounds}), forcing final response...`);
 
     // Force a final text response without tools
     const finalResponse = await this.claudeService.generateResponse(
@@ -824,7 +778,7 @@ export class MessageHandler {
       systemPrompt,
       urlContext,
       undefined,
-      false // Disable tools to force a text response
+      false, // Disable tools to force a text response
     );
 
     return typeof finalResponse === "string"
@@ -834,14 +788,15 @@ export class MessageHandler {
 
   private async sendResponse(
     message: Message,
-    response: string | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> }
+    response:
+      | string
+      | { text: string; files: Array<{ name: string; content: string; mimeType?: string }> },
   ): Promise<void> {
-
     // Extract text and files
     let responseText: string;
     let files: Array<{ name: string; content: string; mimeType?: string }> = [];
 
-    if (typeof response === 'string') {
+    if (typeof response === "string") {
       responseText = response;
     } else {
       responseText = response.text;
@@ -849,22 +804,22 @@ export class MessageHandler {
     }
 
     // Prepare Discord attachments from files
-    const attachments = files.map(file => ({
+    const attachments = files.map((file) => ({
       attachment: Buffer.from(file.content),
       name: file.name,
-      description: `Generated file: ${file.name}`
+      description: `Generated file: ${file.name}`,
     }));
 
     if (responseText.length <= DISCORD_MAX_MESSAGE_LENGTH) {
       // Response fits within limit, send as-is with attachments
       await message.reply({
         content: responseText,
-        files: attachments
+        files: attachments,
       });
     } else {
       // Split long messages into chunks
       console.log(
-        `📝 Response is ${responseText.length} chars (exceeds ${DISCORD_MAX_MESSAGE_LENGTH} limit), splitting...`
+        `📝 Response is ${responseText.length} chars (exceeds ${DISCORD_MAX_MESSAGE_LENGTH} limit), splitting...`,
       );
 
       // Log if response contains citations to help debug
@@ -877,7 +832,7 @@ export class MessageHandler {
       // Send first chunk as reply with attachments (if any)
       await message.reply({
         content: chunks[0],
-        files: attachments
+        files: attachments,
       });
 
       // Send remaining chunks as follow-up messages
@@ -914,9 +869,7 @@ export class MessageHandler {
       // If we couldn't find any space/newline, force split at the limit
       // This handles edge cases like very long URLs or words
       if (splitAt === maxLength) {
-        console.log(
-          "⚠️ No space/newline found, forcing split at character limit"
-        );
+        console.log("⚠️ No space/newline found, forcing split at character limit");
       }
 
       // Add this chunk and continue with the rest

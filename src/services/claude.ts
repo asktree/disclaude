@@ -9,7 +9,7 @@ import {
   ANTHROPIC_MAX_RETRY_DELAY_MS,
   MAX_CODE_OUTPUT_LENGTH,
   MAX_IMAGE_SIZE_MB,
-  IMAGE_ESTIMATED_TOKENS
+  IMAGE_ESTIMATED_TOKENS,
 } from "../constants";
 import {
   ClaudeMessage,
@@ -20,30 +20,30 @@ import {
   ClaudeTextBlock,
   ClaudeToolUseBlock,
   ClaudeWebSearchResult,
-  ClaudeCodeExecutionResult
+  ClaudeCodeExecutionResult,
 } from "../types";
 
 // Helper function to determine MIME type from filename
 function getMimeType(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase();
+  const ext = filename.split(".").pop()?.toLowerCase();
   const mimeTypes: Record<string, string> = {
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'gif': 'image/gif',
-    'svg': 'image/svg+xml',
-    'pdf': 'application/pdf',
-    'json': 'application/json',
-    'csv': 'text/csv',
-    'txt': 'text/plain',
-    'html': 'text/html',
-    'xml': 'application/xml',
-    'py': 'text/x-python',
-    'js': 'text/javascript',
-    'ts': 'text/typescript',
-    'md': 'text/markdown',
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    pdf: "application/pdf",
+    json: "application/json",
+    csv: "text/csv",
+    txt: "text/plain",
+    html: "text/html",
+    xml: "application/xml",
+    py: "text/x-python",
+    js: "text/javascript",
+    ts: "text/typescript",
+    md: "text/markdown",
   };
-  return mimeTypes[ext || ''] || 'application/octet-stream';
+  return mimeTypes[ext || ""] || "application/octet-stream";
 }
 
 export class ClaudeService {
@@ -67,7 +67,7 @@ export class ClaudeService {
     additionalContext?: string,
     model?: string,
     enableTools: boolean = false,
-    retryCount: number = 0
+    retryCount: number = 0,
   ): Promise<ClaudeResponse> {
     try {
       console.log(
@@ -75,7 +75,7 @@ export class ClaudeService {
           model || config.anthropic.model
         }, tools: ${enableTools ? "enabled" : "disabled"})${
           retryCount > 0 ? ` [Retry ${retryCount}]` : ""
-        }`
+        }`,
       );
 
       // Build the system prompt with additional context if provided
@@ -192,8 +192,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
                   },
                   limit: {
                     type: "number" as const,
-                    description:
-                      "Number of messages to fetch (1-100). Defaults to 50.",
+                    description: "Number of messages to fetch (1-100). Defaults to 50.",
                     minimum: 1,
                     maximum: 100,
                   },
@@ -204,8 +203,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
                   },
                   after_message_id: {
                     type: "string" as const,
-                    description:
-                      "Fetch messages after this message ID. Use to get newer messages.",
+                    description: "Fetch messages after this message ID. Use to get newer messages.",
                   },
                   around_message_id: {
                     type: "string" as const,
@@ -246,45 +244,34 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         system: fullSystemPrompt,
         tools: tools as any as ToolUnion[],
         messages: messages.map((msg) => ({
-          role:
-            msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
+          role: msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
           content: msg.content,
         })) as Anthropic.MessageParam[],
       });
 
       // Log all content blocks for debugging
-      console.log(
-        `📊 Response blocks: ${response.content.map((b: any) => b.type).join(", ")}`
-      );
+      console.log(`📊 Response blocks: ${response.content.map((b: any) => b.type).join(", ")}`);
 
       // Log each text block individually
-      const textBlocks = response.content.filter(
-        (block: any) => block.type === "text"
-      );
+      const textBlocks = response.content.filter((block: any) => block.type === "text");
       if (textBlocks.length > 0) {
         console.log(`📝 Found ${textBlocks.length} text blocks:`);
         let totalCitations = 0;
 
         textBlocks.forEach((block: any, index: number) => {
           const textBlock = block;
-          console.log(
-            `\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`
-          );
+          console.log(`\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`);
           console.log(
             `  Preview: "${textBlock.text.substring(0, 100)}${
               textBlock.text.length > 100 ? "..." : ""
-            }"`
+            }"`,
           );
 
           // Check if this block has citations field
           if (textBlock.citations && Array.isArray(textBlock.citations)) {
             console.log(`  📎 Has ${textBlock.citations.length} citation(s):`);
             textBlock.citations.forEach((citation: any, i: number) => {
-              console.log(
-                `     ${i + 1}. "${citation.title || "No title"}" - ${
-                  citation.url
-                }`
-              );
+              console.log(`     ${i + 1}. "${citation.title || "No title"}" - ${citation.url}`);
             });
             totalCitations += textBlock.citations.length;
           }
@@ -295,7 +282,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
       // Log web search usage if present
       const webSearchResults = response.content.filter(
-        (block: any) => block.type === "web_search_tool_result"
+        (block: any) => block.type === "web_search_tool_result",
       );
 
       if (webSearchResults.length > 0) {
@@ -305,12 +292,10 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
         // Extract search query from tool use blocks
         const toolUseBlocks = response.content.filter(
-          (block: any) =>
-            block.type === "server_tool_use" && block.name === "web_search"
+          (block: any) => block.type === "server_tool_use" && block.name === "web_search",
         );
         if (toolUseBlocks.length > 0) {
-          searchQuery =
-            (toolUseBlocks[0] as any).input?.query || "unknown query";
+          searchQuery = (toolUseBlocks[0] as any).input?.query || "unknown query";
         }
 
         // Count results and collect URLs
@@ -326,14 +311,8 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           }
         }
 
-        console.log(
-          `🔍 Web search occurred: "${searchQuery}" - found ${resultCount} results`
-        );
-        console.log(
-          `   URLs found: ${urls.slice(0, 3).join(", ")}${
-            urls.length > 3 ? "..." : ""
-          }`
-        );
+        console.log(`🔍 Web search occurred: "${searchQuery}" - found ${resultCount} results`);
+        console.log(`   URLs found: ${urls.slice(0, 3).join(", ")}${urls.length > 3 ? "..." : ""}`);
 
         // Log first result structure for debugging
         const firstResult = ((webSearchResults[0] as any).content || [])[0];
@@ -347,14 +326,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             hasEncryptedContent: !!firstResult.encrypted_content,
             otherFields: Object.keys(firstResult).filter(
               (k) =>
-                ![
-                  "type",
-                  "title",
-                  "url",
-                  "snippet",
-                  "content",
-                  "encrypted_content",
-                ].includes(k)
+                !["type", "title", "url", "snippet", "content", "encrypted_content"].includes(k),
             ),
           });
         }
@@ -364,34 +336,28 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       const codeExecutionResults = response.content.filter(
         (block: any) =>
           block.type === "text_editor_code_execution_tool_result" ||
-          block.type === "bash_code_execution_tool_result"
+          block.type === "bash_code_execution_tool_result",
       );
 
       if (codeExecutionResults.length > 0) {
-        console.log(
-          `💻 Code execution results found: ${codeExecutionResults.length}`
-        );
+        console.log(`💻 Code execution results found: ${codeExecutionResults.length}`);
         codeExecutionResults.forEach((result: any, index: number) => {
           console.log(`\n  [Code Execution ${index + 1}] Type: ${result.type}`);
           if (result.output) {
             console.log(
               `  Output preview: ${result.output.substring(0, 200)}${
                 result.output.length > 200 ? "..." : ""
-              }`
+              }`,
             );
           }
         });
       }
 
       // Check if Claude wants to use custom tools
-      const toolUseBlocks = response.content.filter(
-        (block) => block.type === "tool_use"
-      );
+      const toolUseBlocks = response.content.filter((block) => block.type === "tool_use");
 
       // Filter out web_search since it's already been handled
-      const customToolBlocks = toolUseBlocks.filter(
-        (block: any) => block.name !== "web_search"
-      );
+      const customToolBlocks = toolUseBlocks.filter((block: any) => block.name !== "web_search");
 
       if (customToolBlocks.length > 0 && enableTools) {
         // Return custom tool calls for execution
@@ -400,7 +366,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           toolCalls: customToolBlocks.map((block: any) => ({
             id: block.id,
             name: block.name,
-            input: (block.input || {}) as Record<string, any>
+            input: (block.input || {}) as Record<string, any>,
           })),
         };
       }
@@ -499,8 +465,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             const maxOutputLength = 1500;
             if (codeResult.output.length > maxOutputLength) {
               resultText +=
-                codeResult.output.substring(0, maxOutputLength) +
-                "\n... (output truncated)\n";
+                codeResult.output.substring(0, maxOutputLength) + "\n... (output truncated)\n";
             } else {
               resultText += codeResult.output + "\n";
             }
@@ -523,7 +488,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
                 generatedFiles.push({
                   name: file.name,
                   content: fileContent,
-                  mimeType: file.mime_type || getMimeType(file.name)
+                  mimeType: file.mime_type || getMimeType(file.name),
                 });
 
                 resultText += `\n📎 Generated file: ${file.name}`;
@@ -540,24 +505,26 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       if (generatedFiles.length > 0) {
         return {
           text: textContent || "I couldn't generate a response.",
-          files: generatedFiles
+          files: generatedFiles,
         };
       }
 
       return textContent || "I couldn't generate a response.";
     } catch (error: any) {
       // Check if it's a retryable error (500, 502, 503, 529)
-      const isRetryable =
-        error?.status && [500, 502, 503, 529].includes(error.status);
+      const isRetryable = error?.status && [500, 502, 503, 529].includes(error.status);
       const isOverloaded = error?.message?.includes("Overloaded");
       const hasRetryHeader = error?.headers?.get?.("x-should-retry") === "true";
 
       if ((isRetryable || isOverloaded || hasRetryHeader) && retryCount < ANTHROPIC_MAX_RETRIES) {
-        const delay = Math.min(ANTHROPIC_RETRY_DELAY_MS * Math.pow(2, retryCount), ANTHROPIC_MAX_RETRY_DELAY_MS); // Exponential backoff with max delay
+        const delay = Math.min(
+          ANTHROPIC_RETRY_DELAY_MS * Math.pow(2, retryCount),
+          ANTHROPIC_MAX_RETRY_DELAY_MS,
+        ); // Exponential backoff with max delay
         console.log(
           `⚠️ API error (${
             error?.status || "unknown"
-          }), retrying in ${delay}ms... (attempt ${retryCount + 1}/${ANTHROPIC_MAX_RETRIES})`
+          }), retrying in ${delay}ms... (attempt ${retryCount + 1}/${ANTHROPIC_MAX_RETRIES})`,
         );
 
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -569,7 +536,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           additionalContext,
           model,
           enableTools,
-          retryCount + 1
+          retryCount + 1,
         );
       }
 
@@ -600,12 +567,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
       case "image/png":
         // PNG files start with 89 50 4E 47 0D 0A 1A 0A
-        return (
-          data[0] === 0x89 &&
-          data[1] === 0x50 &&
-          data[2] === 0x4e &&
-          data[3] === 0x47
-        );
+        return data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47;
 
       case "image/gif":
         // GIF files start with GIF87a or GIF89a
@@ -641,7 +603,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
   async formatDiscordMessages(
     messages: Message[],
-    botId: string
+    botId: string,
   ): Promise<Array<{ role: string; content: string }>> {
     const formattedMessages = [];
     for (const msg of messages) {
@@ -655,7 +617,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
   async formatDiscordMessagesWithImages(
     messages: Message[],
-    botId: string
+    botId: string,
   ): Promise<Array<{ role: string; content: string | any[] }>> {
     const formattedMessages = [];
 
@@ -675,51 +637,39 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       }
 
       // Add image attachments - only formats supported by Claude API
-      const supportedImageTypes = [
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-      ];
-      const imageAttachments = Array.from(msg.attachments.values()).filter(
-        (att) => {
-          // Check content type first
-          if (
-            att.contentType &&
-            supportedImageTypes.includes(att.contentType)
-          ) {
-            return true;
-          }
-          // Fallback to file extension check for supported formats only
-          return att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+      const supportedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      const imageAttachments = Array.from(msg.attachments.values()).filter((att) => {
+        // Check content type first
+        if (att.contentType && supportedImageTypes.includes(att.contentType)) {
+          return true;
         }
-      );
+        // Fallback to file extension check for supported formats only
+        return att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+      });
 
       // Log skipped unsupported images
       const allImageAttachments = Array.from(msg.attachments.values()).filter(
         (att) =>
           att.contentType?.startsWith("image/") ||
-          att.name?.match(/\.(png|jpg|jpeg|gif|webp|avif|bmp|tiff)$/i)
+          att.name?.match(/\.(png|jpg|jpeg|gif|webp|avif|bmp|tiff)$/i),
       );
 
       const skippedAttachments = allImageAttachments.filter(
-        (att) => !imageAttachments.includes(att)
+        (att) => !imageAttachments.includes(att),
       );
 
       for (const skipped of skippedAttachments) {
         console.log(
           `⚠️ Skipping unsupported image: ${skipped.name} (${
             skipped.contentType || "unknown type"
-          })`
+          })`,
         );
       }
 
       // Process all images concurrently
       const imagePromises = imageAttachments.map(async (attachment) => {
         try {
-          console.log(
-            `🖼️ Processing image: ${attachment.name} (${attachment.url})`
-          );
+          console.log(`🖼️ Processing image: ${attachment.name} (${attachment.url})`);
 
           // Fetch the image data
           const response = await fetch(attachment.url);
@@ -736,13 +686,11 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             console.log(
               `⚠️ Skipping image ${
                 attachment.name
-              }: Too large (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`
+              }: Too large (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
             );
             return {
               type: "text",
-              text: `[Image too large to process: ${
-                attachment.name
-              } (${sizeMB.toFixed(2)}MB)]`,
+              text: `[Image too large to process: ${attachment.name} (${sizeMB.toFixed(2)}MB)]`,
             } as const;
           }
 
@@ -780,15 +728,10 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
           // Validate the image by checking magic bytes (file signature)
           const uint8Array = new Uint8Array(arrayBuffer);
-          const isValidImage = this.validateImageSignature(
-            uint8Array,
-            mediaType
-          );
+          const isValidImage = this.validateImageSignature(uint8Array, mediaType);
 
           if (!isValidImage) {
-            console.log(
-              `⚠️ Skipping image ${attachment.name}: Invalid or corrupted image data`
-            );
+            console.log(`⚠️ Skipping image ${attachment.name}: Invalid or corrupted image data`);
             return {
               type: "text",
               text: `[Unable to process image: ${attachment.name} - may be corrupted]`,
@@ -798,7 +741,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           console.log(
             `✅ Successfully processed image: ${
               attachment.name
-            } (${sizeMB.toFixed(2)}MB, ${mediaType})`
+            } (${sizeMB.toFixed(2)}MB, ${mediaType})`,
           );
 
           return {
@@ -810,10 +753,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             },
           } as const;
         } catch (error) {
-          console.error(
-            `❌ Failed to process image ${attachment.name}:`,
-            error
-          );
+          console.error(`❌ Failed to process image ${attachment.name}:`, error);
           return {
             type: "text",
             text: `[Failed to load image: ${attachment.name}]`,
@@ -836,9 +776,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         formattedMessages.push({
           role,
           content:
-            content.length === 1 && typeof content[0].text === "string"
-              ? content[0].text
-              : content,
+            content.length === 1 && typeof content[0].text === "string" ? content[0].text : content,
         });
       }
     }
