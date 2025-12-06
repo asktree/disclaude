@@ -1,6 +1,7 @@
-import { Client, GatewayIntentBits, Events } from "discord.js";
+import { Client, GatewayIntentBits, Events, TextChannel } from "discord.js";
 import { config } from "./config";
 import { MessageHandler } from "./handlers/messageHandler";
+import { getLatestCommitInfo, generateCommitSummary } from "./utils/gitInfo";
 
 class DisclaudeBot {
   private client: Client;
@@ -20,8 +21,83 @@ class DisclaudeBot {
     this.setupEventHandlers();
   }
 
+  private async sendStartupNotification(client: Client): Promise<void> {
+    try {
+      // Get the latest commit info
+      const commitInfo = await getLatestCommitInfo();
+      if (!commitInfo) {
+        console.log("⚠️ Could not get commit info for startup notification");
+        return;
+      }
+
+      console.log(`📢 Looking for computer-buddy-zone channels...`);
+
+      // Search all guilds for channels named "computer-buddy-zone"
+      for (const guild of client.guilds.cache.values()) {
+        const channel = guild.channels.cache.find(
+          (ch) =>
+            ch.name === "computer-buddy-zone" &&
+            ch.type === 0 // 0 = GUILD_TEXT channel type
+        ) as TextChannel | undefined;
+
+        if (channel) {
+          console.log(
+            `   📍 Found computer-buddy-zone in guild: ${guild.name}`
+          );
+
+          // Generate the commit summary
+          const summary = generateCommitSummary(commitInfo);
+
+          // Create the message with embed
+          const message = {
+            content: `🎉 I've been updated: \`${commitInfo.message}\`\n${commitInfo.githubUrl}`,
+            embeds: [
+              {
+                title: "Update Details",
+                description: summary,
+                color: 0x00ff00, // Green color
+                fields: [
+                  {
+                    name: "Commit",
+                    value: `\`${commitInfo.shortHash}\``,
+                    inline: true,
+                  },
+                  {
+                    name: "Author",
+                    value: commitInfo.author,
+                    inline: true,
+                  },
+                  {
+                    name: "Files Changed",
+                    value: commitInfo.filesChanged.length.toString(),
+                    inline: true,
+                  },
+                ],
+                footer: {
+                  text: `Deployed at ${new Date().toLocaleString()}`,
+                },
+              },
+            ],
+          };
+
+          try {
+            await channel.send(message);
+            console.log(`   ✅ Sent startup notification to ${guild.name}`);
+          } catch (error) {
+            console.error(
+              `   ❌ Failed to send to ${guild.name}:`,
+              error
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error sending startup notification:", error);
+    }
+  }
+
   private setupEventHandlers(): void {
-    this.client.once(Events.ClientReady, (readyClient) => {
+    this.client.once(Events.ClientReady, async (readyClient) => {
       console.log(`✅ Logged in as ${readyClient.user.tag}!`);
       console.log(`🤖 Bot ID: ${readyClient.user.id}`);
       console.log(`📡 Connected to ${readyClient.guilds.cache.size} guilds`);
@@ -34,6 +110,9 @@ class DisclaudeBot {
         activities: [{ name: "ping me for a reply 😃", type: 3 }], // Type 3 = Watching
         status: "online",
       });
+
+      // Send startup notification to computer-buddy-zone channels
+      await this.sendStartupNotification(readyClient);
     });
 
     this.client.on(Events.MessageCreate, async (message) => {
