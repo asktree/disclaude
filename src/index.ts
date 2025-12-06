@@ -35,9 +35,7 @@ class DisclaudeBot {
       // Search all guilds for channels named "computer-buddy-zone"
       for (const guild of client.guilds.cache.values()) {
         const channel = guild.channels.cache.find(
-          (ch) =>
-            ch.name === "computer-buddy-zone" &&
-            ch.type === 0 // 0 = GUILD_TEXT channel type
+          (ch) => ch.name === "computer-buddy-zone" && ch.type === 0 // 0 = GUILD_TEXT channel type
         ) as TextChannel | undefined;
 
         if (channel) {
@@ -79,10 +77,7 @@ class DisclaudeBot {
             await channel.send(message);
             console.log(`   ✅ Sent startup notification to ${guild.name}`);
           } catch (error) {
-            console.error(
-              `   ❌ Failed to send to ${guild.name}:`,
-              error
-            );
+            console.error(`   ❌ Failed to send to ${guild.name}:`, error);
           }
         }
       }
@@ -143,10 +138,6 @@ class DisclaudeBot {
       console.log("🚀 Starting Disclaude bot...");
       console.log(`📝 Using Claude model: ${config.anthropic.model}`);
       console.log(`💬 Max context messages: ${config.bot.maxContextMessages}`);
-      console.log(`⏱️  Follow-up timeout: ${config.bot.followUpTimeoutMs}ms`);
-      console.log(
-        `🔄 Max follow-up messages: ${config.bot.followUpMessageCount}`
-      );
 
       await this.client.login(config.discord.token);
     } catch (error) {
