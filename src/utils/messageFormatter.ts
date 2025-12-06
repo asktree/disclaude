@@ -20,7 +20,9 @@ export function buildDiscordMessageRepresentation(
 
   // Add username and timestamp
   const timestamp = msg.createdAt.toLocaleString();
-  content += `[${timestamp}] ${msg.author.username}`;
+  // Use server nickname if available, otherwise fall back to username
+  const displayName = msg.member?.displayName || msg.author.username;
+  content += `[${timestamp}] ${displayName}`;
 
   // Add bot indicator if it's a bot
   if (msg.author.bot && msg.author.id !== botId) {
