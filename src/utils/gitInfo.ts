@@ -1,3 +1,5 @@
+import Anthropic from "@anthropic-ai/sdk";
+
 export interface FileChange {
   filename: string;
   additions: number;
@@ -188,232 +190,63 @@ function constructGitHubUrl(remoteUrl: string, commitHash: string): string {
 }
 
 /**
- * Generate a detailed natural language summary of the commit changes
- * This function analyzes the actual diffs to provide specific insights
+ * Generate a commit summary by using Claude to analyze the diffs
+ * This sends the actual code changes to Claude for intelligent analysis
  */
-export function generateCommitSummary(commitInfo: GitCommitInfo): string {
+export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<string> {
   const { message, filesChanged, fileDetails, insertions, deletions } = commitInfo;
 
-  let summary = `**${message}**\n\n`;
-
-  // First, provide a high-level overview
-  if (filesChanged.length === 0) {
-    summary += "This update includes configuration or deployment changes.\n";
-  } else {
-    summary += `📝 **Files Modified:** ${filesChanged.length}\n`;
-    summary += `📊 **Changes:** +${insertions} additions, -${deletions} deletions\n\n`;
+  // If we don't have file details with patches, return a simple summary
+  if (!fileDetails || fileDetails.length === 0) {
+    return `**${message}**\n\n📝 Files: ${filesChanged.length} | 📊 Changes: +${insertions}/-${deletions}`;
   }
 
-  // Analyze the actual changes if we have detailed file information
-  if (fileDetails && fileDetails.length > 0) {
-    summary += "## What Changed:\n\n";
+  // Prepare the diff content for Claude
+  let diffContent = `Commit Message: ${message}\n\n`;
+  diffContent += `Stats: ${filesChanged.length} files changed, +${insertions} additions, -${deletions} deletions\n\n`;
+  diffContent += "=== DIFFS ===\n\n";
 
-    // Group files by their purpose/area
-    const groupedFiles: { [key: string]: FileChange[] } = {};
+  // Add each file's diff
+  for (const file of fileDetails) {
+    diffContent += `File: ${file.filename} (${file.status})\n`;
+    diffContent += `Changes: +${file.additions}/-${file.deletions}\n`;
 
-    fileDetails.forEach(file => {
-      // Determine the category based on file path and name
-      let category = "Other";
+    if (file.patch) {
+      // Include the actual diff patch (limited to reasonable size)
+      const patchLines = file.patch.split('\n').slice(0, 100); // Limit to first 100 lines per file
+      diffContent += "```diff\n" + patchLines.join('\n') + "\n```\n\n";
+    }
+  }
 
-      if (file.filename.includes('handler')) {
-        category = "Message Handling";
-      } else if (file.filename.includes('service')) {
-        category = "Services";
-      } else if (file.filename.includes('utils')) {
-        category = "Utilities";
-      } else if (file.filename.includes('config')) {
-        category = "Configuration";
-      } else if (file.filename.includes('index')) {
-        category = "Main Application";
-      } else if (file.filename.includes('test')) {
-        category = "Tests";
-      }
-
-      if (!groupedFiles[category]) {
-        groupedFiles[category] = [];
-      }
-      groupedFiles[category].push(file);
+  // Use Claude API to analyze the diffs
+  try {
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || "",
     });
 
-    // Analyze each group
-    for (const [category, files] of Object.entries(groupedFiles)) {
-      summary += `### ${category}\n`;
+    const response = await anthropic.messages.create({
+      model: "claude-3-haiku-20240307", // Use Haiku for speed and cost efficiency
+      max_tokens: 500,
+      messages: [{
+        role: "user",
+        content: `Analyze this git commit and provide a concise summary of what changed and why it matters. Focus on the actual functionality changes, not just describing the files. Be specific about what the code changes actually do.
 
-      for (const file of files) {
-        summary += `- **${file.filename}** (${file.status}): `;
+${diffContent}
 
-        // Analyze the patch to understand what specifically changed
-        if (file.patch) {
-          const analysis = analyzePatch(file.patch, file.filename);
-          summary += analysis;
-        } else {
-          // Fallback to basic stats if no patch available
-          if (file.status === 'added') {
-            summary += `New file with ${file.additions} lines`;
-          } else if (file.status === 'removed') {
-            summary += `File removed (${file.deletions} lines)`;
-          } else {
-            summary += `Modified with +${file.additions}/-${file.deletions} lines`;
-          }
-        }
-        summary += "\n";
-      }
-      summary += "\n";
-    }
+Provide a brief summary that explains:
+1. What functionality was added, changed, or fixed
+2. Why these changes matter to users or developers
+3. Any important technical details
+
+Keep it concise but informative. Use markdown formatting.`
+      }],
+    });
+
+    const summary = response.content[0].type === 'text' ? response.content[0].text : '';
+    return `**${message}**\n\n${summary}`;
+  } catch (error) {
+    console.error("Failed to generate AI summary:", error);
+    // Fallback to basic summary if API fails
+    return `**${message}**\n\n📝 Files: ${filesChanged.length} | 📊 Changes: +${insertions}/-${deletions}\n\nFiles changed: ${filesChanged.join(', ')}`;
   }
-
-  // Provide specific technical insights based on the changes
-  summary += "## Technical Impact:\n\n";
-
-  // Analyze patterns in the commit message and changes
-  const lowerMessage = message.toLowerCase();
-  const fullCommitMessage = commitInfo.message; // We might have the full message with body
-
-  if (lowerMessage.includes("fix")) {
-    summary += "🔧 **Bug Fix:** ";
-
-    // Try to identify what was fixed
-    if (lowerMessage.includes("nickname") || filesChanged.some(f => f.includes("messageFormatter"))) {
-      summary += "Resolves issues with user display names in Discord messages. ";
-    } else if (lowerMessage.includes("channel")) {
-      summary += "Addresses channel-related functionality issues. ";
-    } else {
-      summary += "Corrects previously broken functionality. ";
-    }
-    summary += "\n";
-  }
-
-  if (lowerMessage.includes("add") || lowerMessage.includes("new")) {
-    summary += "✨ **New Feature:** ";
-
-    // Identify what was added based on files and message
-    if (lowerMessage.includes("tool")) {
-      summary += "Introduces new tool capabilities for the bot. ";
-    } else if (lowerMessage.includes("channel")) {
-      summary += "Adds channel-related functionality. ";
-    } else if (lowerMessage.includes("notification")) {
-      summary += "Implements notification system. ";
-    } else {
-      summary += "Extends bot capabilities with new functionality. ";
-    }
-    summary += "\n";
-  }
-
-  if (lowerMessage.includes("improve") || lowerMessage.includes("enhance") || lowerMessage.includes("update")) {
-    summary += "🚀 **Enhancement:** ";
-
-    // Identify what was improved
-    if (fileDetails) {
-      const majorChanges = fileDetails.filter(f => f.additions + f.deletions > 50);
-      if (majorChanges.length > 0) {
-        summary += `Significant improvements to ${majorChanges.map(f => getFileDescription(f.filename)).join(", ")}. `;
-      } else {
-        summary += "Minor improvements and optimizations. ";
-      }
-    }
-    summary += "\n";
-  }
-
-  if (lowerMessage.includes("refactor")) {
-    summary += "♻️ **Refactoring:** Code structure improved for better maintainability. \n";
-  }
-
-  // Add deployment/runtime considerations
-  summary += "\n## Deployment Notes:\n";
-
-  if (filesChanged.some(f => f.includes('config') || f.includes('.env'))) {
-    summary += "⚠️ Configuration changes may require environment variable updates.\n";
-  }
-
-  if (filesChanged.some(f => f.includes('package.json'))) {
-    summary += "📦 Dependencies changed - run `pnpm install` after pulling.\n";
-  }
-
-  if (insertions > 100 || deletions > 100) {
-    summary += "📈 Substantial code changes - thorough testing recommended.\n";
-  }
-
-  return summary;
-}
-
-/**
- * Analyze a patch/diff to understand what specifically changed
- * This provides detailed insights about the actual code changes
- */
-function analyzePatch(patch: string, filename: string): string {
-  const lines = patch.split('\n');
-  const addedLines = lines.filter(l => l.startsWith('+') && !l.startsWith('+++'));
-  const removedLines = lines.filter(l => l.startsWith('-') && !l.startsWith('---'));
-
-  // Look for specific patterns in the changes
-  const addedContent = addedLines.join('\n');
-  const removedContent = removedLines.join('\n');
-
-  let analysis = "";
-
-  // Detect what type of changes were made
-  if (addedLines.length === 0 && removedLines.length > 0) {
-    analysis = "Removed code";
-  } else if (removedLines.length === 0 && addedLines.length > 0) {
-    // Analyze what was added
-    if (addedContent.includes('async') || addedContent.includes('await')) {
-      analysis = "Added asynchronous functionality";
-    } else if (addedContent.includes('function') || addedContent.includes('=>')) {
-      analysis = "Added new function/method";
-    } else if (addedContent.includes('if') || addedContent.includes('else')) {
-      analysis = "Added conditional logic";
-    } else if (addedContent.includes('console.log')) {
-      analysis = "Added logging";
-    } else if (addedContent.includes('try') || addedContent.includes('catch')) {
-      analysis = "Added error handling";
-    } else if (addedContent.includes('import') || addedContent.includes('require')) {
-      analysis = "Added new dependencies/imports";
-    } else {
-      analysis = "Added new code";
-    }
-  } else {
-    // Both additions and removals - it's a modification
-    // Try to understand the nature of the modification
-    if (addedContent.includes('await') && !removedContent.includes('await')) {
-      analysis = "Made function asynchronous";
-    } else if (filename.includes('.ts') || filename.includes('.js')) {
-      // Analyze code changes
-      if (addedLines.length > removedLines.length * 2) {
-        analysis = "Expanded functionality significantly";
-      } else if (removedLines.length > addedLines.length * 2) {
-        analysis = "Simplified/reduced code";
-      } else {
-        // Look for specific patterns
-        if (addedContent.includes('fetch') || addedContent.includes('.get(')) {
-          analysis = "Modified data fetching logic";
-        } else if (addedContent.includes('.member') || addedContent.includes('displayName')) {
-          analysis = "Changed user/member handling";
-        } else if (addedContent.includes('channel')) {
-          analysis = "Modified channel-related logic";
-        } else {
-          analysis = "Refactored existing logic";
-        }
-      }
-    } else {
-      analysis = `Modified with +${addedLines.length}/-${removedLines.length} lines`;
-    }
-  }
-
-  return analysis;
-}
-
-/**
- * Get a human-readable description of what a file does based on its name/path
- */
-function getFileDescription(filename: string): string {
-  const name = filename.split('/').pop() || filename;
-
-  if (name.includes('handler')) return "message handling";
-  if (name.includes('service')) return "service layer";
-  if (name.includes('formatter')) return "formatting logic";
-  if (name.includes('config')) return "configuration";
-  if (name.includes('utils')) return "utility functions";
-  if (name === 'index.ts' || name === 'index.js') return "main application";
-
-  return name.replace(/\.(ts|js|json)$/, '');
 }

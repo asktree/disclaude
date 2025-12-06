@@ -46,7 +46,7 @@ class DisclaudeBot {
           );
 
           // Generate the commit summary
-          const summary = generateCommitSummary(commitInfo);
+          const summary = await generateCommitSummary(commitInfo);
 
           // Create the message with embed
           const message = {
