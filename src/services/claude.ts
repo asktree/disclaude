@@ -87,6 +87,13 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 - When summarizing multiple channels, read each one individually with tools
 - It's better to say "I couldn't read that channel" than to invent fake conversations
 
+**Memory System:**
+- You have access to a persistent memory tool that survives across conversations
+- Use the memory tool to store important information, user preferences, and context
+- When asked to remember something, ALWAYS use the memory tool (don't just say you'll remember)
+- Check memory when users reference previous conversations or stored information
+- The memory tool supports: view, create, str_replace, insert, delete, and rename commands
+
 **Response Style:**
 - Be concise. Most replies should be only a paragraph unless more detail is specifically needed.
 - Use clear, direct language without unnecessary elaboration.
@@ -330,19 +337,20 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       console.log("");
 
       // Check if Claude wants to use custom tools or memory
-      const toolUseBlocks = response.content.filter(
-        (block: any) =>
-          block.type === "tool_use" ||
-          (block.type === "server_tool_use" && block.name === "memory"),
-      );
+      const toolUseBlocks = response.content.filter((block: any) => block.type === "tool_use");
 
-      // Debug: Log all tool use blocks to see what Claude is actually returning
-      if (toolUseBlocks.length > 0) {
-        console.log("🔍 Tool use blocks found:");
-        toolUseBlocks.forEach((block: any) => {
-          console.log(`   - Type: ${block.type}, Name: ${block.name}`);
-        });
-      }
+      // Debug: Log all blocks to understand what Claude is returning
+      console.log("🔍 All response blocks:");
+      response.content.forEach((block: any) => {
+        if (block.type === "tool_use") {
+          console.log(`   - tool_use: ${block.name} (id: ${block.id})`);
+        } else if (block.type === "text") {
+          const preview = block.text?.substring(0, 50) || "";
+          console.log(`   - text: "${preview}${block.text?.length > 50 ? "..." : ""}"`);
+        } else {
+          console.log(`   - ${block.type}: ${block.name || block.id || ""}`);
+        }
+      });
 
       // Filter out web_search since it's already been handled by Anthropic
       const customToolBlocks = toolUseBlocks.filter((block: any) => block.name !== "web_search");
