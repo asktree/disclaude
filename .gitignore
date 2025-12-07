@@ -34,3 +34,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Data directory (for memory storage in development)
+data/
+/data

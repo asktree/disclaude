@@ -23,6 +23,13 @@ export const config = {
     ),
     fetchUrls: process.env.FETCH_URLS !== "false", // Default true
   },
+  memory: {
+    dataDir:
+      process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT
+        ? "/data" // Use mounted volume in production (Railway)
+        : "./data", // Use local directory in development
+    enabled: process.env.ENABLE_MEMORY !== "false", // Default true
+  },
 };
 
 // Validate required environment variables

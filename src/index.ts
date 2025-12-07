@@ -133,9 +133,21 @@ class DisclaudeBot {
 
   async start(): Promise<void> {
     try {
+      // Ensure data directory exists for memory
+      if (config.memory.enabled) {
+        const fs = await import("fs/promises");
+        try {
+          await fs.mkdir(config.memory.dataDir, { recursive: true });
+          console.log(`📁 Memory data directory ready: ${config.memory.dataDir}`);
+        } catch (error) {
+          console.error(`❌ Failed to create memory data directory:`, error);
+        }
+      }
+
       console.log("🚀 Starting Disclaude bot...");
       console.log(`📝 Using Claude model: ${config.anthropic.model}`);
       console.log(`💬 Max context messages: ${config.bot.maxContextMessages}`);
+      console.log(`🧠 Memory enabled: ${config.memory.enabled ? "Yes" : "No"}`);
 
       await this.client.login(config.discord.token);
     } catch (error) {

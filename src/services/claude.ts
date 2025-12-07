@@ -32,7 +32,7 @@ export class ClaudeService {
     this.anthropic = new Anthropic({
       apiKey: config.anthropic.apiKey,
       defaultHeaders: {
-        "anthropic-beta": "code-execution-2025-08-25",
+        "anthropic-beta": "code-execution-2025-08-25,context-management-2025-06-27",
       },
     });
   }
@@ -132,6 +132,10 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           {
             type: "code_execution_20250825",
             name: "code_execution",
+          },
+          {
+            type: "memory_20250818" as const,
+            name: "memory" as const,
           },
         ];
 
@@ -320,6 +324,14 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           const results = block.content || [];
           const count = results.filter((r: any) => r.type === "web_search_result").length;
           console.log(`  ${blockNum}. 🔍 Web Search: ${count} results`);
+        } else if (block.type === "server_tool_use" && block.name === "memory") {
+          const action = block.input?.command || "unknown";
+          console.log(`  ${blockNum}. 🧠 Memory: ${action}`);
+          if (block.input?.path) {
+            console.log(`     └─ Path: ${block.input.path}`);
+          }
+        } else if (block.type === "memory_tool_result") {
+          console.log(`  ${blockNum}. ✅ Memory operation completed`);
         } else {
           console.log(`  ${blockNum}. ❓ ${block.type}`);
         }
