@@ -23,19 +23,26 @@ export function formatCodeExecutionResult(
       // File creation result - show what was written to the file
       resultText = "\n\n📝 **File Created:**\n";
       if (toolUse && toolUse.input) {
-        // The input might have 'path' and 'text' or 'code' fields
+        // According to Anthropic docs: 'path' and 'file_text' fields
         const filePath = toolUse.input.path || toolUse.input.file_path || "/tmp/untitled.py";
-        const fileContent = toolUse.input.text || toolUse.input.code || toolUse.input.content || "";
+        const fileContent =
+          toolUse.input.file_text || // Primary field per Anthropic docs
+          toolUse.input.text || // Fallback
+          toolUse.input.code || // Fallback for code execution
+          toolUse.input.content ||
+          ""; // Fallback
+
+        // Extract file extension for syntax highlighting
+        const fileExt = filePath.split(".").pop()?.toLowerCase() || "";
 
         resultText += `Path: \`${filePath}\`\n`;
         if (fileContent) {
-          resultText += "```python\n" + fileContent + "\n```\n";
+          resultText += `\`\`\`${fileExt}\n` + fileContent + "\n```\n";
         } else if (toolUse.input) {
           // If we can't find the content in expected fields, show the whole input for debugging
-          resultText += `Debug - Tool input: \`\`\`json\n${JSON.stringify(toolUse.input, null, 2)}\n\`\`\`\n`;
+          resultText += `Debug - Tool result: \`\`\`json\n${JSON.stringify(toolUse.input, null, 2)}\n\`\`\`\n`;
         }
       }
-      resultText += output.is_file_update ? "(File updated)" : "(New file created)";
       return { text: resultText, files: generatedFiles };
     } else {
       // Direct code execution
