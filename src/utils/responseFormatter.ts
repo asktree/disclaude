@@ -39,6 +39,13 @@ export function formatCodeExecutionResult(
           // If we can't find the content in expected fields, show the whole input for debugging
           resultText += `Debug - Tool input: \`\`\`json\n${JSON.stringify(toolUse.input, null, 2)}\n\`\`\`\n`;
         }
+      } else {
+        // No tool use found, but we know a file was created
+        // Extract any file info from the result itself
+        if ((output as any).file_id) {
+          resultText += `File ID: \`${(output as any).file_id}\`\n`;
+        }
+        resultText += `(Tool input not available - check server_tool_use names in logs)\n`;
       }
       resultText += output.is_file_update ? "(File updated)" : "(New file created)";
       return { text: resultText, files: generatedFiles };
