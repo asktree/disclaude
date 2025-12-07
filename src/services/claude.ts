@@ -23,11 +23,7 @@ import {
   ClaudeWebSearchResult,
   ClaudeCodeExecutionResult,
 } from "../types";
-import {
-  formatCodeExecutionResult,
-  formatWebSearchResults,
-  formatCitations,
-} from "../utils/responseFormatter";
+import { formatCodeExecutionResult, formatCitations } from "../utils/responseFormatter";
 
 export class ClaudeService {
   private anthropic: Anthropic;
@@ -260,45 +256,8 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         })) as Anthropic.MessageParam[],
       });
 
-      // Log all content blocks for debugging
-      console.log(`📊 Response blocks: ${response.content.map((b: any) => b.type).join(", ")}`);
-
-      // Log each text block individually
-      const textBlocks = response.content.filter((block: any) => block.type === "text");
-      if (textBlocks.length > 0) {
-        console.log(`📝 Found ${textBlocks.length} text blocks:`);
-        let totalCitations = 0;
-
-        textBlocks.forEach((block: any, index: number) => {
-          const textBlock = block;
-          console.log(`\n  [Text Block ${index + 1}] (length: ${textBlock.text.length}):`);
-          console.log(
-            `  Preview: "${textBlock.text.substring(0, 100)}${
-              textBlock.text.length > 100 ? "..." : ""
-            }"`,
-          );
-
-          // Check if this block has citations field
-          if (textBlock.citations && Array.isArray(textBlock.citations)) {
-            console.log(`  📎 Has ${textBlock.citations.length} citation(s):`);
-            textBlock.citations.forEach((citation: any, i: number) => {
-              console.log(`     ${i + 1}. "${citation.title || "No title"}" - ${citation.url}`);
-            });
-            totalCitations += textBlock.citations.length;
-          }
-        });
-
-        console.log(`\n📊 Total citations found: ${totalCitations}`);
-      }
-
-      // Log web search usage if present using extracted formatter
-      const webSearchResults = response.content.filter(
-        (block: any) => block.type === "web_search_tool_result",
-      );
-
-      if (webSearchResults.length > 0) {
-        formatWebSearchResults(webSearchResults);
-      }
+      // Log response blocks in order for better readability
+      console.log(`\n📊 Claude's response (${response.content.length} blocks):`);
 
       // Create map to track code execution tool uses by their IDs (needed for formatting)
       const codeExecutionMap = new Map<string, any>();
@@ -315,37 +274,58 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         }
       }
 
-      // Log code execution results if present
-      const codeExecutionResults = response.content.filter(
-        (block: any) =>
-          block.type === "text_editor_code_execution_tool_result" ||
-          block.type === "bash_code_execution_tool_result",
-      );
+      // Log each block in order
+      response.content.forEach((block: any, index: number) => {
+        const blockNum = index + 1;
 
-      if (codeExecutionResults.length > 0) {
-        console.log(`💻 Code execution results found: ${codeExecutionResults.length}`);
-        codeExecutionResults.forEach((result: any, index: number) => {
-          console.log(`\n  [Code Execution ${index + 1}] Type: ${result.type}`);
-          if (result.output) {
-            console.log(
-              `  Output preview: ${result.output.substring(0, 200)}${
-                result.output.length > 200 ? "..." : ""
-              }`,
-            );
-          } else if (result.content) {
-            const content = result.content;
-            if (content.type === "text_editor_code_execution_create_result") {
-              console.log(`  File ${content.is_file_update ? "updated" : "created"}`);
-            } else if (content.stdout !== undefined) {
-              console.log(
-                `  Stdout: ${content.stdout.substring(0, 200)}${content.stdout.length > 200 ? "..." : ""}`,
-              );
-            } else {
-              console.log(`  Content type: ${content.type}`);
-            }
+        if (block.type === "text") {
+          const preview = block.text.substring(0, 100);
+          console.log(
+            `  ${blockNum}. 📝 Text (${block.text.length} chars): "${preview}${block.text.length > 100 ? "..." : ""}"`,
+          );
+
+          if (block.citations && block.citations.length > 0) {
+            console.log(`     └─ ${block.citations.length} citation(s)`);
           }
-        });
-      }
+        } else if (block.type === "server_tool_use") {
+          console.log(`  ${blockNum}. 🔧 Tool Use: ${block.name}`);
+          if (block.name === "text_editor_code_execution" || block.name === "text_editor") {
+            const path = block.input?.path || block.input?.file_path || "unknown";
+            console.log(`     └─ Creating file: ${path}`);
+          } else if (block.name === "bash_code_execution" || block.name === "bash") {
+            const cmd = block.input?.command || "";
+            const cmdPreview = cmd.substring(0, 60);
+            console.log(`     └─ Command: ${cmdPreview}${cmd.length > 60 ? "..." : ""}`);
+          }
+        } else if (block.type === "text_editor_code_execution_tool_result") {
+          const content = block.content;
+          if (content?.type === "text_editor_code_execution_create_result") {
+            console.log(`  ${blockNum}. ✅ File ${content.is_file_update ? "updated" : "created"}`);
+          } else {
+            console.log(`  ${blockNum}. ✅ Text Editor Result`);
+          }
+        } else if (block.type === "bash_code_execution_tool_result") {
+          const content = block.content;
+          if (content?.stdout) {
+            const preview = content.stdout.substring(0, 100).replace(/\n/g, " ");
+            console.log(
+              `  ${blockNum}. ✅ Bash Output: "${preview}${content.stdout.length > 100 ? "..." : ""}"`,
+            );
+          } else {
+            console.log(`  ${blockNum}. ✅ Bash Result (no output)`);
+          }
+        } else if (block.type === "tool_use") {
+          console.log(`  ${blockNum}. 🔨 Custom Tool: ${block.name}`);
+        } else if (block.type === "web_search_tool_result") {
+          const results = block.content || [];
+          const count = results.filter((r: any) => r.type === "web_search_result").length;
+          console.log(`  ${blockNum}. 🔍 Web Search: ${count} results`);
+        } else {
+          console.log(`  ${blockNum}. ❓ ${block.type}`);
+        }
+      });
+
+      console.log("");
 
       // Check if Claude wants to use custom tools
       const toolUseBlocks = response.content.filter((block: any) => block.type === "tool_use");
