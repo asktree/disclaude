@@ -32,6 +32,7 @@ import {
   FetchUrlHandler,
   ReadDiscordMessagesHandler,
   ListDiscordChannelsHandler,
+  MemoryHandler,
 } from "../tools";
 import { ToolCall, ToolContext } from "../types/tool.types";
 
@@ -61,6 +62,12 @@ export class MessageHandler {
     this.toolRegistry.register(new FetchUrlHandler(this.urlFetcher));
     this.toolRegistry.register(new ReadDiscordMessagesHandler(this.claudeService));
     this.toolRegistry.register(new ListDiscordChannelsHandler());
+
+    // Register memory handler if memory is enabled
+    if (config.memory.enabled) {
+      this.toolRegistry.register(new MemoryHandler());
+      console.log("🧠 Memory handler registered");
+    }
 
     console.log("🔧 Registered tools:", this.toolRegistry.getRegisteredTools());
   }

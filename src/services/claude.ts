@@ -130,11 +130,15 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             type: "code_execution_20250825",
             name: "code_execution",
           },
-          {
+        ];
+
+        // Add memory tool if enabled
+        if (config.memory.enabled) {
+          tools.push({
             type: "memory_20250818" as const,
             name: "memory" as const,
-          },
-        ];
+          });
+        }
 
         // Debug log native tools
         console.log(`   Native tools: ${tools.map((t: any) => t.name || t.type).join(", ")}`);
@@ -342,14 +346,18 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
       console.log("");
 
-      // Check if Claude wants to use custom tools
-      const toolUseBlocks = response.content.filter((block: any) => block.type === "tool_use");
+      // Check if Claude wants to use custom tools or memory
+      const toolUseBlocks = response.content.filter(
+        (block: any) =>
+          block.type === "tool_use" ||
+          (block.type === "server_tool_use" && block.name === "memory"),
+      );
 
-      // Filter out web_search since it's already been handled
+      // Filter out web_search since it's already been handled by Anthropic
       const customToolBlocks = toolUseBlocks.filter((block: any) => block.name !== "web_search");
 
       if (customToolBlocks.length > 0 && enableTools) {
-        // Return custom tool calls for execution
+        // Return tool calls for execution (includes both custom tools and memory)
         // Include the full block structure with type field for proper API formatting
         return {
           needsTools: true,
