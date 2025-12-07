@@ -300,24 +300,18 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         formatWebSearchResults(webSearchResults);
       }
 
-      // Create map to track code execution tool uses by their IDs (needed for logging and formatting)
+      // Create map to track code execution tool uses by their IDs (needed for formatting)
       const codeExecutionMap = new Map<string, any>();
       for (const block of response.content) {
         const blockAny = block as any;
-        if (blockAny.type === "server_tool_use") {
-          // Log all server tool uses to debug what names Claude is actually using
-          console.log(`  Found server_tool_use: name="${blockAny.name}", id="${blockAny.id}"`);
-
-          // Map text_editor or text_editor_code_execution tool uses
-          if (
-            blockAny.name === "text_editor_code_execution" ||
+        if (
+          blockAny.type === "server_tool_use" &&
+          (blockAny.name === "text_editor_code_execution" ||
             blockAny.name === "text_editor" ||
             blockAny.name === "bash_code_execution" ||
-            blockAny.name === "bash"
-          ) {
-            codeExecutionMap.set(blockAny.id, blockAny);
-            console.log(`    -> Added to codeExecutionMap`);
-          }
+            blockAny.name === "bash")
+        ) {
+          codeExecutionMap.set(blockAny.id, blockAny);
         }
       }
 
@@ -332,14 +326,6 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         console.log(`💻 Code execution results found: ${codeExecutionResults.length}`);
         codeExecutionResults.forEach((result: any, index: number) => {
           console.log(`\n  [Code Execution ${index + 1}] Type: ${result.type}`);
-
-          // Find and log the corresponding tool use input
-          const toolUse = result.tool_use_id ? codeExecutionMap.get(result.tool_use_id) : null;
-          if (toolUse && toolUse.input) {
-            console.log(`  Tool input:`, JSON.stringify(toolUse.input, null, 2).substring(0, 500));
-          }
-
-          console.log(`  Full result:`, JSON.stringify(result, null, 2).substring(0, 500));
           if (result.output) {
             console.log(
               `  Output preview: ${result.output.substring(0, 200)}${
@@ -347,7 +333,16 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
               }`,
             );
           } else if (result.content) {
-            console.log(`  Found content field instead of output:`, result.content);
+            const content = result.content;
+            if (content.type === "text_editor_code_execution_create_result") {
+              console.log(`  File ${content.is_file_update ? "updated" : "created"}`);
+            } else if (content.stdout !== undefined) {
+              console.log(
+                `  Stdout: ${content.stdout.substring(0, 200)}${content.stdout.length > 200 ? "..." : ""}`,
+              );
+            } else {
+              console.log(`  Content type: ${content.type}`);
+            }
           }
         });
       }

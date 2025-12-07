@@ -14,11 +14,6 @@ export function formatCodeExecutionResult(
   // Try to find the corresponding tool use to get the code/command
   const toolUse = codeResult.tool_use_id ? codeExecutionMap.get(codeResult.tool_use_id) : null;
 
-  if (!toolUse && codeResult.tool_use_id) {
-    console.log(`  ⚠️ Could not find tool use for ID: ${codeResult.tool_use_id}`);
-    console.log(`    Available IDs in map: ${Array.from(codeExecutionMap.keys()).join(", ")}`);
-  }
-
   // Check for output in either 'output' or 'content' field (Anthropic uses 'content')
   const output = codeResult.output || (codeResult as any).content;
 
@@ -39,13 +34,6 @@ export function formatCodeExecutionResult(
           // If we can't find the content in expected fields, show the whole input for debugging
           resultText += `Debug - Tool input: \`\`\`json\n${JSON.stringify(toolUse.input, null, 2)}\n\`\`\`\n`;
         }
-      } else {
-        // No tool use found, but we know a file was created
-        // Extract any file info from the result itself
-        if ((output as any).file_id) {
-          resultText += `File ID: \`${(output as any).file_id}\`\n`;
-        }
-        resultText += `(Tool input not available - check server_tool_use names in logs)\n`;
       }
       resultText += output.is_file_update ? "(File updated)" : "(New file created)";
       return { text: resultText, files: generatedFiles };
