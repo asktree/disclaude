@@ -32,9 +32,29 @@ export function formatCodeExecutionResult(
   const output = codeResult.output || (codeResult as any).content;
 
   if (output) {
+    let outputStr = "";
+
+    // Handle different output formats
+    if (typeof output === "string") {
+      outputStr = output;
+    } else if (output.stdout !== undefined || output.stderr !== undefined) {
+      // Handle structured output with stdout/stderr
+      if (output.stdout) {
+        outputStr = output.stdout;
+      }
+      if (output.stderr) {
+        outputStr += (outputStr ? "\n" : "") + `[stderr] ${output.stderr}`;
+      }
+      if (!outputStr && output.return_code !== undefined && output.return_code !== 0) {
+        outputStr = `Process exited with code ${output.return_code}`;
+      }
+    } else {
+      // Fallback to JSON for other object types
+      outputStr = JSON.stringify(output);
+    }
+
     // Limit output to prevent overly long messages
     const maxOutputLength = MAX_CODE_OUTPUT_LENGTH || 1500;
-    const outputStr = typeof output === "string" ? output : JSON.stringify(output);
     if (outputStr.length > maxOutputLength) {
       resultText += outputStr.substring(0, maxOutputLength) + "\n... (output truncated)\n";
     } else {
