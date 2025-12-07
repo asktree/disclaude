@@ -13,7 +13,8 @@ interface ReadDiscordMessagesInput {
 
 export class ReadDiscordMessagesHandler implements ToolHandler {
   name = "read_discord_messages";
-  description = "Read messages from a Discord channel";
+  description =
+    "Read actual messages from a Discord channel. Returns real messages only - never make up content if this tool fails. Use list_discord_channels first to see available channels.";
   input_schema: ToolSchema = {
     type: "object",
     properties: {
@@ -220,7 +221,7 @@ export class ReadDiscordMessagesHandler implements ToolHandler {
       }
 
       return {
-        content: `Error reading Discord messages: ${error}`,
+        content: `Error reading Discord messages: ${error}\n\n⚠️ IMPORTANT: Could not read this channel. Do not make up or hallucinate any messages. If you need to check what channels exist, use the list_discord_channels tool first.`,
         error: true,
       };
     }

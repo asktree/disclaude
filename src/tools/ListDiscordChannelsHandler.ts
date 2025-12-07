@@ -8,7 +8,8 @@ interface ListDiscordChannelsInput {
 
 export class ListDiscordChannelsHandler implements ToolHandler {
   name = "list_discord_channels";
-  description = "List all channels in a Discord guild";
+  description =
+    "List all channels in a Discord guild. ALWAYS use this first when asked about multiple channels or 'all channels' to see what's actually available.";
   input_schema: ToolSchema = {
     type: "object",
     properties: {
