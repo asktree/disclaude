@@ -14,6 +14,11 @@ export function formatCodeExecutionResult(
   // Try to find the corresponding tool use to get the code/command
   const toolUse = codeResult.tool_use_id ? codeExecutionMap.get(codeResult.tool_use_id) : null;
 
+  if (!toolUse && codeResult.tool_use_id) {
+    console.log(`  ⚠️ Could not find tool use for ID: ${codeResult.tool_use_id}`);
+    console.log(`    Available IDs in map: ${Array.from(codeExecutionMap.keys()).join(", ")}`);
+  }
+
   // Check for output in either 'output' or 'content' field (Anthropic uses 'content')
   const output = codeResult.output || (codeResult as any).content;
 

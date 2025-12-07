@@ -300,16 +300,24 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         formatWebSearchResults(webSearchResults);
       }
 
-      // Create map to track code execution tool uses by their IDs (needed for logging)
+      // Create map to track code execution tool uses by their IDs (needed for logging and formatting)
       const codeExecutionMap = new Map<string, any>();
       for (const block of response.content) {
         const blockAny = block as any;
-        if (
-          blockAny.type === "server_tool_use" &&
-          (blockAny.name === "text_editor_code_execution" ||
-            blockAny.name === "bash_code_execution")
-        ) {
-          codeExecutionMap.set(blockAny.id, blockAny);
+        if (blockAny.type === "server_tool_use") {
+          // Log all server tool uses to debug what names Claude is actually using
+          console.log(`  Found server_tool_use: name="${blockAny.name}", id="${blockAny.id}"`);
+
+          // Map text_editor or text_editor_code_execution tool uses
+          if (
+            blockAny.name === "text_editor_code_execution" ||
+            blockAny.name === "text_editor" ||
+            blockAny.name === "bash_code_execution" ||
+            blockAny.name === "bash"
+          ) {
+            codeExecutionMap.set(blockAny.id, blockAny);
+            console.log(`    -> Added to codeExecutionMap`);
+          }
         }
       }
 
