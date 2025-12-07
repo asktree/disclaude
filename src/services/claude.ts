@@ -139,6 +139,9 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           },
         ];
 
+        // Debug log native tools
+        console.log(`   Native tools: ${tools.map((t: any) => t.name || t.type).join(", ")}`);
+
         // Add custom tool definitions if provided
         if (customToolDefinitions && customToolDefinitions.length > 0) {
           const customTools = customToolDefinitions.map((tool) => ({
@@ -146,6 +149,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             type: "custom" as const,
           }));
           tools = [...tools, ...customTools];
+          console.log(`   Custom tools: ${customTools.map((t: any) => t.name).join(", ")}`);
         } else {
           // Fallback to hardcoded tools (for backward compatibility)
           tools.push(
