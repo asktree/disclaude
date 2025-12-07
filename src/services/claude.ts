@@ -353,6 +353,14 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           (block.type === "server_tool_use" && block.name === "memory"),
       );
 
+      // Debug: Log all tool use blocks to see what Claude is actually returning
+      if (toolUseBlocks.length > 0) {
+        console.log("🔍 Tool use blocks found:");
+        toolUseBlocks.forEach((block: any) => {
+          console.log(`   - Type: ${block.type}, Name: ${block.name}`);
+        });
+      }
+
       // Filter out web_search since it's already been handled by Anthropic
       const customToolBlocks = toolUseBlocks.filter((block: any) => block.name !== "web_search");
 
