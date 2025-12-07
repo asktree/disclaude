@@ -27,6 +27,7 @@ export interface ClaudeImageContent {
 }
 
 export interface ClaudeToolCall {
+  type: "tool_use";
   id: string;
   name: string;
   input: Record<string, any>; // Use any for more flexibility with tool inputs

@@ -381,9 +381,11 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
       if (customToolBlocks.length > 0 && enableTools) {
         // Return custom tool calls for execution
+        // Include the full block structure with type field for proper API formatting
         return {
           needsTools: true,
           toolCalls: customToolBlocks.map((block: any) => ({
+            type: "tool_use",
             id: block.id,
             name: block.name,
             input: (block.input || {}) as Record<string, any>,
