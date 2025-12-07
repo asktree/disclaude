@@ -23,29 +23,11 @@ import {
   ClaudeWebSearchResult,
   ClaudeCodeExecutionResult,
 } from "../types";
-
-// Helper function to determine MIME type from filename
-function getMimeType(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = {
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    gif: "image/gif",
-    svg: "image/svg+xml",
-    pdf: "application/pdf",
-    json: "application/json",
-    csv: "text/csv",
-    txt: "text/plain",
-    html: "text/html",
-    xml: "application/xml",
-    py: "text/x-python",
-    js: "text/javascript",
-    ts: "text/typescript",
-    md: "text/markdown",
-  };
-  return mimeTypes[ext || ""] || "application/octet-stream";
-}
+import {
+  formatCodeExecutionResult,
+  formatWebSearchResults,
+  formatCitations,
+} from "../utils/responseFormatter";
 
 export class ClaudeService {
   private anthropic: Anthropic;
@@ -309,56 +291,13 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         console.log(`\n📊 Total citations found: ${totalCitations}`);
       }
 
-      // Log web search usage if present
+      // Log web search usage if present using extracted formatter
       const webSearchResults = response.content.filter(
         (block: any) => block.type === "web_search_tool_result",
       );
 
       if (webSearchResults.length > 0) {
-        let searchQuery = "";
-        let resultCount = 0;
-        const urls: string[] = [];
-
-        // Extract search query from tool use blocks
-        const toolUseBlocks = response.content.filter(
-          (block: any) => block.type === "server_tool_use" && block.name === "web_search",
-        );
-        if (toolUseBlocks.length > 0) {
-          searchQuery = (toolUseBlocks[0] as any).input?.query || "unknown query";
-        }
-
-        // Count results and collect URLs
-        for (const resultBlock of webSearchResults) {
-          const results = (resultBlock as any).content || [];
-          for (const result of results) {
-            if (result.type === "web_search_result") {
-              resultCount++;
-              if (result.url) {
-                urls.push(result.url);
-              }
-            }
-          }
-        }
-
-        console.log(`🔍 Web search occurred: "${searchQuery}" - found ${resultCount} results`);
-        console.log(`   URLs found: ${urls.slice(0, 3).join(", ")}${urls.length > 3 ? "..." : ""}`);
-
-        // Log first result structure for debugging
-        const firstResult = ((webSearchResults[0] as any).content || [])[0];
-        if (firstResult) {
-          console.log(`   Sample result structure:`, {
-            type: firstResult.type,
-            title: firstResult.title?.substring(0, 50),
-            url: firstResult.url,
-            hasSnippet: !!firstResult.snippet,
-            hasContent: !!firstResult.content,
-            hasEncryptedContent: !!firstResult.encrypted_content,
-            otherFields: Object.keys(firstResult).filter(
-              (k) =>
-                !["type", "title", "url", "snippet", "content", "encrypted_content"].includes(k),
-            ),
-          });
-        }
+        formatWebSearchResults(webSearchResults);
       }
 
       // Log code execution results if present
@@ -372,18 +311,21 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         console.log(`💻 Code execution results found: ${codeExecutionResults.length}`);
         codeExecutionResults.forEach((result: any, index: number) => {
           console.log(`\n  [Code Execution ${index + 1}] Type: ${result.type}`);
+          console.log(`  Full structure:`, JSON.stringify(result, null, 2).substring(0, 500));
           if (result.output) {
             console.log(
               `  Output preview: ${result.output.substring(0, 200)}${
                 result.output.length > 200 ? "..." : ""
               }`,
             );
+          } else if (result.content) {
+            console.log(`  Found content field instead of output:`, result.content);
           }
         });
       }
 
       // Check if Claude wants to use custom tools
-      const toolUseBlocks = response.content.filter((block) => block.type === "tool_use");
+      const toolUseBlocks = response.content.filter((block: any) => block.type === "tool_use");
 
       // Filter out web_search since it's already been handled
       const customToolBlocks = toolUseBlocks.filter((block: any) => block.name !== "web_search");
@@ -426,39 +368,25 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           const textBlock = block as any;
           let blockText = textBlock.text;
 
-          // If this block has citations, append them inline
+          // Use the extracted formatter for citations
+          const citationText = formatCitations(textBlock.citations, urlToCitationNum, {
+            value: citationCounter,
+          });
+
+          // Update citation counter if new citations were added
           if (textBlock.citations && Array.isArray(textBlock.citations)) {
-            // First, deduplicate citations by URL within this block
-            const uniqueCitations = new Map<string, any>();
-            for (const citation of textBlock.citations) {
-              if (citation.url && !uniqueCitations.has(citation.url)) {
-                uniqueCitations.set(citation.url, citation);
+            const urls: string[] = textBlock.citations
+              .map((c: any) => c.url)
+              .filter((url: any): url is string => typeof url === "string");
+            const uniqueUrls = new Set(urls);
+            for (const url of uniqueUrls) {
+              if (!urlToCitationNum.has(url)) {
+                citationCounter++;
               }
-            }
-
-            // Build citation links
-            const citationLinks: string[] = [];
-            for (const citation of uniqueCitations.values()) {
-              let citationNum: number;
-
-              // Check if we've already seen this URL
-              if (urlToCitationNum.has(citation.url)) {
-                citationNum = urlToCitationNum.get(citation.url)!;
-              } else {
-                citationNum = citationCounter++;
-                urlToCitationNum.set(citation.url, citationNum);
-              }
-
-              // Add citation link with <> to prevent embeds
-              citationLinks.push(`[${citationNum}](<${citation.url}>)`);
-            }
-
-            // Append all citations for this block grouped together
-            if (citationLinks.length > 0) {
-              blockText += ` (${citationLinks.join(", ")})`;
             }
           }
 
+          blockText += citationText;
           textContent += (textContent ? " " : "") + blockText;
         }
 
@@ -468,66 +396,16 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           blockAny.type === "text_editor_code_execution_tool_result" ||
           blockAny.type === "bash_code_execution_tool_result"
         ) {
-          // Handle code execution results
-          const codeResult = blockAny;
-          let resultText = "";
+          // Use the extracted formatter for code execution results
+          const { text: resultText, files } = formatCodeExecutionResult(
+            blockAny as ClaudeCodeExecutionResult,
+            codeExecutionMap,
+          );
 
-          // Try to find the corresponding tool use to get the code/command
-          const toolUse = codeResult.tool_use_id
-            ? codeExecutionMap.get(codeResult.tool_use_id)
-            : null;
+          // Add any generated files to the list
+          generatedFiles.push(...files);
 
-          if (blockAny.type === "text_editor_code_execution_tool_result") {
-            resultText = "\n\n📝 **Python Code Execution:**\n";
-            if (toolUse && toolUse.input && toolUse.input.code) {
-              resultText += "```python\n" + toolUse.input.code + "\n```\n";
-            }
-            resultText += "**Output:**\n```\n";
-          } else {
-            resultText = "\n\n🖥️ **Bash Command Execution:**\n";
-            if (toolUse && toolUse.input && toolUse.input.command) {
-              resultText += "```bash\n" + toolUse.input.command + "\n```\n";
-            }
-            resultText += "**Output:**\n```\n";
-          }
-
-          if (codeResult.output) {
-            // Limit output to prevent overly long messages
-            const maxOutputLength = 1500;
-            if (codeResult.output.length > maxOutputLength) {
-              resultText +=
-                codeResult.output.substring(0, maxOutputLength) + "\n... (output truncated)\n";
-            } else {
-              resultText += codeResult.output + "\n";
-            }
-          } else if (codeResult.error) {
-            resultText += `Error: ${codeResult.error}\n`;
-          } else {
-            resultText += "(No output)\n";
-          }
-
-          // Check for generated files in the code execution result
-          if (codeResult.files && Array.isArray(codeResult.files)) {
-            for (const file of codeResult.files) {
-              if (file.name && file.content) {
-                // Decode base64 content if present
-                let fileContent = file.content;
-                if (file.encoding === "base64") {
-                  fileContent = Buffer.from(file.content, "base64").toString();
-                }
-
-                generatedFiles.push({
-                  name: file.name,
-                  content: fileContent,
-                  mimeType: file.mime_type || getMimeType(file.name),
-                });
-
-                resultText += `\n📎 Generated file: ${file.name}`;
-              }
-            }
-          }
-
-          resultText += "```";
+          // Add the formatted text to the content
           textContent += resultText;
         }
       }
