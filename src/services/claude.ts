@@ -31,9 +31,6 @@ export class ClaudeService {
   constructor() {
     this.anthropic = new Anthropic({
       apiKey: config.anthropic.apiKey,
-      defaultHeaders: {
-        "anthropic-beta": "code-execution-2025-08-25,context-management-2025-06-27",
-      },
     });
   }
 
@@ -253,7 +250,8 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         tools = undefined;
       }
 
-      const response = await this.anthropic.messages.create({
+      // Use beta API for memory support
+      const response = await this.anthropic.beta.messages.create({
         model: model || config.anthropic.model,
         max_tokens: 2000,
         system: fullSystemPrompt,
@@ -262,6 +260,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           role: msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
           content: msg.content,
         })) as Anthropic.MessageParam[],
+        betas: ["code-execution-2025-08-25", "context-management-2025-06-27"],
       });
 
       // Log response blocks in order for better readability
