@@ -236,10 +236,7 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
 
 ${diffContent}
 
-Format your response as one short paragraph (2-3 sentences) capturing the essence of this change.
-
-Also: If (AND ONLY IF!!!!) you spot any critical issues, add a line starting with "⚠️ WARNING:" followed by a brief description. Focus on actual functionality impact and real problems only. Don't mention minor style issues. 
-`,
+Format your response as one short paragraph (2-3 sentences) capturing the essence of this change.`,
         },
       ],
     });
