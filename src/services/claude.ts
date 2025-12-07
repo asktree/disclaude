@@ -7,22 +7,9 @@ import {
   ANTHROPIC_MAX_RETRIES,
   ANTHROPIC_RETRY_DELAY_MS,
   ANTHROPIC_MAX_RETRY_DELAY_MS,
-  MAX_CODE_OUTPUT_LENGTH,
   MAX_IMAGE_SIZE_MB,
-  IMAGE_ESTIMATED_TOKENS,
 } from "../constants";
-import {
-  ClaudeMessage,
-  ClaudeResponse,
-  ClaudeContent,
-  ClaudeToolCall,
-  GeneratedFile,
-  ClaudeTextBlock,
-  ToolDefinition,
-  ClaudeToolUseBlock,
-  ClaudeWebSearchResult,
-  ClaudeCodeExecutionResult,
-} from "../types";
+import { ClaudeResponse, ToolDefinition, ClaudeCodeExecutionResult } from "../types";
 import { formatCodeExecutionResult, formatCitations } from "../utils/responseFormatter";
 
 export class ClaudeService {
@@ -140,9 +127,6 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           });
         }
 
-        // Debug log native tools
-        console.log(`   Native tools: ${tools.map((t: any) => t.name || t.type).join(", ")}`);
-
         // Add custom tool definitions if provided
         if (customToolDefinitions && customToolDefinitions.length > 0) {
           const customTools = customToolDefinitions.map((tool) => ({
@@ -150,7 +134,6 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             type: "custom" as const,
           }));
           tools = [...tools, ...customTools];
-          console.log(`   Custom tools: ${customTools.map((t: any) => t.name).join(", ")}`);
         } else {
           // Fallback to hardcoded tools (for backward compatibility)
           tools.push(
