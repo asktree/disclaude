@@ -311,7 +311,14 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         console.log(`💻 Code execution results found: ${codeExecutionResults.length}`);
         codeExecutionResults.forEach((result: any, index: number) => {
           console.log(`\n  [Code Execution ${index + 1}] Type: ${result.type}`);
-          console.log(`  Full structure:`, JSON.stringify(result, null, 2).substring(0, 500));
+
+          // Find and log the corresponding tool use input
+          const toolUse = result.tool_use_id ? codeExecutionMap.get(result.tool_use_id) : null;
+          if (toolUse && toolUse.input) {
+            console.log(`  Tool input:`, JSON.stringify(toolUse.input, null, 2).substring(0, 500));
+          }
+
+          console.log(`  Full result:`, JSON.stringify(result, null, 2).substring(0, 500));
           if (result.output) {
             console.log(
               `  Output preview: ${result.output.substring(0, 200)}${

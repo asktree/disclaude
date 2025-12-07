@@ -14,12 +14,37 @@ export function formatCodeExecutionResult(
   // Try to find the corresponding tool use to get the code/command
   const toolUse = codeResult.tool_use_id ? codeExecutionMap.get(codeResult.tool_use_id) : null;
 
+  // Check for output in either 'output' or 'content' field (Anthropic uses 'content')
+  const output = codeResult.output || (codeResult as any).content;
+
   if (codeResult.type === "text_editor_code_execution_tool_result") {
-    resultText = "\n\n📝 **Python Code Execution:**\n";
-    if (toolUse && toolUse.input && toolUse.input.code) {
-      resultText += "```python\n" + toolUse.input.code + "\n```\n";
+    // Handle text editor results (file creation or code execution)
+    if (output && output.type === "text_editor_code_execution_create_result") {
+      // File creation result - show what was written to the file
+      resultText = "\n\n📝 **File Created:**\n";
+      if (toolUse && toolUse.input) {
+        // The input might have 'path' and 'text' or 'code' fields
+        const filePath = toolUse.input.path || toolUse.input.file_path || "/tmp/untitled.py";
+        const fileContent = toolUse.input.text || toolUse.input.code || toolUse.input.content || "";
+
+        resultText += `Path: \`${filePath}\`\n`;
+        if (fileContent) {
+          resultText += "```python\n" + fileContent + "\n```\n";
+        } else if (toolUse.input) {
+          // If we can't find the content in expected fields, show the whole input for debugging
+          resultText += `Debug - Tool input: \`\`\`json\n${JSON.stringify(toolUse.input, null, 2)}\n\`\`\`\n`;
+        }
+      }
+      resultText += output.is_file_update ? "(File updated)" : "(New file created)";
+      return { text: resultText, files: generatedFiles };
+    } else {
+      // Direct code execution
+      resultText = "\n\n📝 **Python Code Execution:**\n";
+      if (toolUse && toolUse.input && toolUse.input.code) {
+        resultText += "```python\n" + toolUse.input.code + "\n```\n";
+      }
+      resultText += "**Output:**\n```\n";
     }
-    resultText += "**Output:**\n```\n";
   } else {
     resultText = "\n\n🖥️ **Bash Command Execution:**\n";
     if (toolUse && toolUse.input && toolUse.input.command) {
@@ -27,9 +52,6 @@ export function formatCodeExecutionResult(
     }
     resultText += "**Output:**\n```\n";
   }
-
-  // Check for output in either 'output' or 'content' field (Anthropic uses 'content')
-  const output = codeResult.output || (codeResult as any).content;
 
   if (output) {
     let outputStr = "";
@@ -48,17 +70,24 @@ export function formatCodeExecutionResult(
       if (!outputStr && output.return_code !== undefined && output.return_code !== 0) {
         outputStr = `Process exited with code ${output.return_code}`;
       }
-    } else {
-      // Fallback to JSON for other object types
+    } else if (output.type === "text_editor_code_execution_result" && output.output) {
+      // Direct execution result from text editor
+      outputStr = output.output;
+    } else if (output.type !== "text_editor_code_execution_create_result") {
+      // Don't show JSON for file creation results (already handled above)
       outputStr = JSON.stringify(output);
     }
 
     // Limit output to prevent overly long messages
     const maxOutputLength = MAX_CODE_OUTPUT_LENGTH || 1500;
-    if (outputStr.length > maxOutputLength) {
-      resultText += outputStr.substring(0, maxOutputLength) + "\n... (output truncated)\n";
+    if (outputStr) {
+      if (outputStr.length > maxOutputLength) {
+        resultText += outputStr.substring(0, maxOutputLength) + "\n... (output truncated)\n";
+      } else {
+        resultText += outputStr + "\n";
+      }
     } else {
-      resultText += outputStr + "\n";
+      resultText += "(No output)\n";
     }
   } else if (codeResult.error) {
     resultText += `Error: ${codeResult.error}\n`;
