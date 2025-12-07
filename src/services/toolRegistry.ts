@@ -56,11 +56,16 @@ export class ToolRegistry {
    * Get tool definitions for Claude API
    */
   getToolDefinitions(): ToolDefinition[] {
-    return Array.from(this.handlers.values()).map((handler) => ({
-      name: handler.name,
-      description: handler.description,
-      input_schema: handler.input_schema,
-    }));
+    return (
+      Array.from(this.handlers.values())
+        // Filter out memory since it's declared as a native Anthropic tool
+        .filter((handler) => handler.name !== "memory")
+        .map((handler) => ({
+          name: handler.name,
+          description: handler.description,
+          input_schema: handler.input_schema,
+        }))
+    );
   }
 
   /**
