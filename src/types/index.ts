@@ -151,3 +151,16 @@ export interface ProcessableAttachment extends Omit<Attachment, "contentType"> {
   url: string;
   contentType?: string | null;
 }
+
+// Tool definition for Claude API
+export interface ToolDefinition {
+  type?: "custom";
+  name: string;
+  description: string;
+  input_schema: {
+    type: "object";
+    properties: Record<string, any>;
+    required?: string[];
+    additionalProperties?: boolean;
+  };
+}

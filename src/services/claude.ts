@@ -18,6 +18,7 @@ import {
   ClaudeToolCall,
   GeneratedFile,
   ClaudeTextBlock,
+  ToolDefinition,
   ClaudeToolUseBlock,
   ClaudeWebSearchResult,
   ClaudeCodeExecutionResult,
@@ -68,6 +69,7 @@ export class ClaudeService {
     model?: string,
     enableTools: boolean = false,
     retryCount: number = 0,
+    customToolDefinitions?: ToolDefinition[],
   ): Promise<ClaudeResponse> {
     try {
       console.log(
@@ -129,18 +131,33 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         fullSystemPrompt += additionalContext;
       }
 
-      // Use Anthropic's native web search tool if enabled
-      const tools = enableTools
-        ? [
-            {
-              type: "web_search_20250305" as const,
-              name: "web_search" as const,
-              max_uses: 5, // Allow up to 5 searches per request
-            },
-            {
-              type: "code_execution_20250825",
-              name: "code_execution",
-            },
+      // Use custom tool definitions if provided, otherwise use the default built-in tools
+      let tools: any[] | undefined;
+
+      if (enableTools) {
+        // Always include Anthropic's native tools
+        tools = [
+          {
+            type: "web_search_20250305" as const,
+            name: "web_search" as const,
+            max_uses: 5, // Allow up to 5 searches per request
+          },
+          {
+            type: "code_execution_20250825",
+            name: "code_execution",
+          },
+        ];
+
+        // Add custom tool definitions if provided
+        if (customToolDefinitions && customToolDefinitions.length > 0) {
+          const customTools = customToolDefinitions.map((tool) => ({
+            ...tool,
+            type: "custom" as const,
+          }));
+          tools = [...tools, ...customTools];
+        } else {
+          // Fallback to hardcoded tools (for backward compatibility)
+          tools.push(
             {
               type: "custom" as const,
               name: "read_source_code",
@@ -235,8 +252,11 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
                 required: [],
               },
             },
-          ]
-        : undefined;
+          );
+        }
+      } else {
+        tools = undefined;
+      }
 
       const response = await this.anthropic.messages.create({
         model: model || config.anthropic.model,

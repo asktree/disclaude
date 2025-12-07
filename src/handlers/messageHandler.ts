@@ -26,6 +26,14 @@ import {
   FetchedUrl,
   ReadDiscordMessagesInput,
 } from "../types";
+import { ToolRegistry } from "../services/toolRegistry";
+import {
+  ReadSourceCodeHandler,
+  FetchUrlHandler,
+  ReadDiscordMessagesHandler,
+  ListDiscordChannelsHandler,
+} from "../tools";
+import { ToolCall, ToolContext } from "../types/tool.types";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
@@ -33,6 +41,7 @@ export class MessageHandler {
   private repoReader: RepoReader;
   private tokenCounter: TokenCounter;
   private botId: string;
+  private toolRegistry: ToolRegistry;
 
   constructor(botId: string) {
     this.claudeService = new ClaudeService();
@@ -40,6 +49,20 @@ export class MessageHandler {
     this.repoReader = new RepoReader();
     this.tokenCounter = new TokenCounter();
     this.botId = botId;
+
+    // Initialize tool registry and register tools
+    this.toolRegistry = new ToolRegistry();
+    this.registerTools();
+  }
+
+  private registerTools(): void {
+    // Register all tool handlers
+    this.toolRegistry.register(new ReadSourceCodeHandler(this.repoReader));
+    this.toolRegistry.register(new FetchUrlHandler(this.urlFetcher));
+    this.toolRegistry.register(new ReadDiscordMessagesHandler(this.claudeService));
+    this.toolRegistry.register(new ListDiscordChannelsHandler());
+
+    console.log("🔧 Registered tools:", this.toolRegistry.getRegisteredTools());
   }
 
   async handleMessage(message: Message): Promise<void> {
@@ -240,6 +263,8 @@ export class MessageHandler {
         additionalContext,
         undefined,
         true, // Enable tools
+        0, // retryCount
+        this.toolRegistry.getToolDefinitions(), // Pass tool definitions
       );
 
       // Handle tool execution if needed
@@ -301,432 +326,34 @@ export class MessageHandler {
           console.log(`\n🔧 Tool Call: ${toolCall.name}`);
           console.log(`   Input: ${JSON.stringify(toolCall.input, null, 2)}`);
 
-          // Note: web_search is handled automatically by Anthropic's API
-          // We only handle custom tools here
-          if (toolCall.name === "read_source_code") {
-            let statusMessage: Message | undefined;
-            try {
-              const files = toolCall.input.files || [];
-              console.log(
-                `   📖 Reading source code: ${
-                  files.length === 0 ? "repository structure" : files.join(", ")
-                }`,
-              );
+          // Check if this is a tool we handle with the registry
+          if (this.toolRegistry.hasHandler(toolCall.name)) {
+            // Use the tool registry to execute the tool
+            const context: ToolContext = {
+              message: originalMessage!,
+              botId: this.botId,
+            };
 
-              // Send initial status message to Discord
-              if (originalMessage && "send" in originalMessage.channel) {
-                if (files.length === 0) {
-                  statusMessage = await originalMessage.channel.send(
-                    `📂 *Getting repository structure...*`,
-                  );
-                } else {
-                  statusMessage = await originalMessage.channel.send(
-                    `📖 *Reading ${files.length} source file${files.length !== 1 ? "s" : ""}...*`,
-                  );
-                }
-              }
+            const result = await this.toolRegistry.execute(toolCall as ToolCall, context);
 
-              // Execute the file reading
-              let sourceContent = "";
-              if (files.length === 0) {
-                // Get repository structure
-                sourceContent = await this.repoReader.getRepoStructure();
-                console.log(`   ✅ Loaded repository structure`);
-              } else {
-                // Read specific files
-                for (const filePath of files) {
-                  const content = await this.repoReader.getFileContent(filePath);
-                  sourceContent += `\n--- ${filePath} ---\n\`\`\`typescript\n${content}\n\`\`\`\n`;
-                }
-                console.log(`   ✅ Loaded ${files.length} source file(s)`);
-              }
-
-              // Edit the status message to show completion
-              if (statusMessage) {
-                if (files.length === 0) {
-                  await statusMessage.edit(`✅ *Repository structure loaded*`);
-                } else {
-                  await statusMessage.edit(
-                    `✅ *Loaded ${files.length} file${files.length !== 1 ? "s" : ""}*`,
-                  );
-                }
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: sourceContent,
-              });
-            } catch (error) {
-              console.error("   ❌ Error reading source code:", error);
-
-              // Edit status message to show error
-              if (statusMessage) {
-                await statusMessage.edit(`⚠️ *Failed to read source code: ${error}*`);
-              } else if (originalMessage && "send" in originalMessage.channel) {
-                await originalMessage.channel.send(`⚠️ *Failed to read source code: ${error}*`);
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: `Error reading source code: ${error}`,
-              });
-            }
-          } else if (toolCall.name === "fetch_url") {
-            let statusMessage: Message | undefined;
-            try {
-              const url = toolCall.input.url;
-              console.log(`   🔗 Fetching URL: ${url}`);
-
-              // Send initial status message to Discord
-              if (originalMessage && "send" in originalMessage.channel) {
-                statusMessage = await originalMessage.channel.send(
-                  `🔗 *Fetching content from ${url}...*`,
-                );
-              }
-
-              // Fetch the URL content
-              const fetchedUrls = await this.urlFetcher.fetchAllUrls([url]);
-              let toolContent: any;
-
-              if (fetchedUrls.length > 0 && fetchedUrls[0].content) {
-                const fetched = fetchedUrls[0];
-
-                // Check if it's an image
-                if (fetched.isImage) {
-                  // For images, pass the content directly as it's already formatted for Claude
-                  toolContent = fetched.content;
-                  console.log(`   ✅ Successfully fetched image from ${url}`);
-
-                  // Edit the status message to show completion
-                  if (statusMessage) {
-                    await statusMessage.edit(`✅ *Fetched image from ${url}*`);
-                  }
-                } else {
-                  // For text content, format it as before
-                  toolContent = `URL: ${fetched.url}\nTitle: ${
-                    fetched.title || "N/A"
-                  }\n\nContent:\n${fetched.content}`;
-                  console.log(`   ✅ Successfully fetched content from ${url}`);
-
-                  // Edit the status message to show completion
-                  if (statusMessage) {
-                    await statusMessage.edit(`✅ *Fetched content from ${url}*`);
-                  }
-                }
-              } else {
-                toolContent = `Failed to fetch content from ${url}`;
-                console.log(`   ❌ Failed to fetch content from ${url}`);
-
-                // Edit status message to show failure
-                if (statusMessage) {
-                  await statusMessage.edit(`⚠️ *Failed to fetch content from ${url}*`);
-                }
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: toolContent,
-              });
-            } catch (error) {
-              console.error(`   ❌ Error fetching URL:`, error);
-
-              // Edit status message to show error
-              if (statusMessage) {
-                await statusMessage.edit(`⚠️ *Failed to fetch URL: ${error}*`);
-              } else if (originalMessage && "send" in originalMessage.channel) {
-                await originalMessage.channel.send(`⚠️ *Failed to fetch URL: ${error}*`);
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: `Error fetching URL: ${error}`,
-              });
-            }
-          } else if (toolCall.name === "read_discord_messages") {
-            let statusMessage: Message | undefined;
-            try {
-              // Parse tool input
-              const {
-                channel_id,
-                limit = DEFAULT_DISCORD_MESSAGES_LIMIT,
-                before_message_id,
-                after_message_id,
-                around_message_id,
-              } = toolCall.input as ReadDiscordMessagesInput;
-
-              // Use current channel if not specified
-              const targetChannelId = channel_id || originalMessage?.channelId;
-
-              if (!targetChannelId) {
-                throw new Error("No channel ID provided and current channel not available");
-              }
-
-              console.log(
-                `   📜 Reading Discord messages from channel ${targetChannelId} (limit: ${limit})`,
-              );
-
-              // Send initial status message to Discord
-              if (originalMessage && "send" in originalMessage.channel) {
-                statusMessage = await originalMessage.channel.send(
-                  `📜 *Reading ${limit} messages from ${
-                    channel_id ? `channel <#${channel_id}>` : "this channel"
-                  }...*`,
-                );
-              }
-
-              // Get the Discord client from the original message
-              const client = originalMessage?.client;
-              if (!client) {
-                throw new Error("Discord client not available");
-              }
-
-              // Fetch the channel
-              const targetChannel = await client.channels.fetch(targetChannelId);
-              if (!targetChannel || !("messages" in targetChannel)) {
-                throw new Error(`Channel ${targetChannelId} not found or not a text channel`);
-              }
-
-              // Build fetch options for Discord API
-              interface FetchOptions {
-                limit: number;
-                before?: string;
-                after?: string;
-                around?: string;
-              }
-              const fetchOptions: FetchOptions = {
-                limit: Math.min(limit, MAX_DISCORD_MESSAGES_LIMIT),
-              };
-              if (before_message_id) fetchOptions.before = before_message_id;
-              if (after_message_id) fetchOptions.after = after_message_id;
-              if (around_message_id) fetchOptions.around = around_message_id;
-
-              // Fetch messages
-              const messages = (await (targetChannel as TextChannel).messages.fetch(
-                fetchOptions,
-              )) as unknown as Collection<string, Message>;
-
-              // Convert to array and reverse to get chronological order
-              const messageArray = Array.from(messages.values()).reverse() as Message[];
-
-              console.log(`   ✅ Fetched ${messageArray.length} messages`);
-
-              // Format messages using the same methods as initial context
-              // This now includes all metadata: timestamps, usernames, reactions, attachments, etc.
-              const hasImages = messageArray.some(
-                (msg) =>
-                  msg.attachments.size > 0 &&
-                  Array.from(msg.attachments.values()).some(
-                    (att) =>
-                      att.contentType?.startsWith("image/") ||
-                      att.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i),
-                  ),
-              );
-
-              // Add channel information to the content
-              let formattedContent = `=== Messages from #${(targetChannel as TextChannel).name} (ID: ${targetChannelId}) ===\n\n`;
-
-              if (hasImages) {
-                console.log("   📸 Found images in fetched messages");
-                const formatted = await this.claudeService.formatDiscordMessagesWithImages(
-                  messageArray,
-                  this.botId,
-                );
-                // Convert formatted messages to text (already includes rich metadata)
-                for (const msg of formatted) {
-                  if (typeof msg.content === "string") {
-                    formattedContent += msg.content + "\n\n";
-                  } else {
-                    // Handle complex content with images
-                    const textParts = msg.content
-                      .filter((c: any) => c.type === "text")
-                      .map((c: any) => c.text)
-                      .join("");
-                    const imageParts = msg.content.filter((c: any) => c.type === "image").length;
-
-                    formattedContent += textParts;
-                    if (imageParts > 0) {
-                      formattedContent += ` [${imageParts} image(s) loaded]`;
-                    }
-                    formattedContent += "\n\n";
-                  }
-                }
-              } else {
-                // Simple text formatting (already includes rich metadata)
-                const formatted = await this.claudeService.formatDiscordMessages(
-                  messageArray,
-                  this.botId,
-                );
-                for (const msg of formatted) {
-                  formattedContent += msg.content + "\n\n";
-                }
-              }
-
-              // Edit the status message to show completion
-              if (statusMessage) {
-                await statusMessage.edit(
-                  `✅ *Read ${messageArray.length} messages from ${
-                    channel_id ? `<#${channel_id}>` : "this channel"
-                  }*`,
-                );
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: formattedContent || "No messages found",
-              });
-            } catch (error) {
-              console.error("   ❌ Error reading Discord messages:", error);
-
-              // Edit status message to show error
-              if (statusMessage) {
-                await statusMessage.edit(`⚠️ *Failed to read Discord messages: ${error}*`);
-              } else if (originalMessage && "send" in originalMessage.channel) {
-                await originalMessage.channel.send(
-                  `⚠️ *Failed to read Discord messages: ${error}*`,
-                );
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: `Error reading Discord messages: ${error}`,
-              });
-            }
-          } else if (toolCall.name === "list_discord_channels") {
-            let statusMessage: Message | undefined;
-            try {
-              const { guild_id, include_categories = false } = toolCall.input;
-
-              console.log(
-                `   📋 Listing Discord channels${
-                  guild_id ? ` from guild ${guild_id}` : " from current guild"
-                }`,
-              );
-
-              // Send initial status message to Discord
-              if (originalMessage && "send" in originalMessage.channel) {
-                statusMessage = await originalMessage.channel.send(
-                  `📋 *Listing available channels...*`,
-                );
-              }
-
-              // Get the Discord client and guild
-              const client = originalMessage?.client;
-              if (!client) {
-                throw new Error("Discord client not available");
-              }
-
-              // Determine which guild to list channels from
-              let targetGuild;
-              if (guild_id) {
-                targetGuild = client.guilds.cache.get(guild_id);
-                if (!targetGuild) {
-                  throw new Error(`Guild ${guild_id} not found`);
-                }
-              } else if (originalMessage?.guild) {
-                targetGuild = originalMessage.guild;
-              } else {
-                throw new Error("No guild specified and current message is not from a guild");
-              }
-
-              // Get all channels from the guild
-              const channels = targetGuild.channels.cache;
-
-              // Format channel list
-              let channelList = `=== Channels in ${targetGuild.name} ===\n\n`;
-
-              // Group channels by category
-              const categories = new Map<string | null, any[]>();
-
-              channels.forEach((channel) => {
-                if (channel.type === 4 && include_categories) {
-                  // Category channel
-                  if (!categories.has(channel.id)) {
-                    categories.set(channel.id, []);
-                  }
-                } else if (channel.parent) {
-                  // Channel with a category
-                  const categoryId = channel.parent.id;
-                  if (!categories.has(categoryId)) {
-                    categories.set(categoryId, []);
-                  }
-                  categories.get(categoryId)!.push(channel);
-                } else if (channel.type !== 4) {
-                  // Channel without category
-                  if (!categories.has(null)) {
-                    categories.set(null, []);
-                  }
-                  categories.get(null)!.push(channel);
-                }
-              });
-
-              // Format output
-              const channelTypeMap: { [key: number]: string } = {
-                0: "📝", // Text
-                2: "🔊", // Voice
-                4: "📁", // Category
-                5: "📢", // Announcement
-                13: "🎭", // Stage
-                15: "💬", // Forum
-              };
-
-              // Show uncategorized channels first
-              if (categories.has(null)) {
-                channelList += "**Uncategorized Channels:**\n";
-                const uncategorized = categories.get(null)!;
-                uncategorized.sort((a, b) => a.name.localeCompare(b.name));
-                uncategorized.forEach((channel) => {
-                  const emoji = channelTypeMap[channel.type] || "📌";
-                  channelList += `${emoji} #${channel.name} (ID: ${channel.id})\n`;
-                });
-                channelList += "\n";
-              }
-
-              // Show categorized channels
-              channels.forEach((category) => {
-                if (category.type === 4) {
-                  const categoryChannels = categories.get(category.id);
-                  if (categoryChannels && categoryChannels.length > 0) {
-                    channelList += `**📁 ${category.name}:**\n`;
-                    categoryChannels.sort((a, b) => a.position - b.position);
-                    categoryChannels.forEach((channel) => {
-                      const emoji = channelTypeMap[channel.type] || "📌";
-                      channelList += `  ${emoji} #${channel.name} (ID: ${channel.id})\n`;
-                    });
-                    channelList += "\n";
-                  }
-                }
-              });
-
-              channelList += `\n📊 Total: ${channels.size} channels`;
-
-              // Edit the status message to show completion
-              if (statusMessage) {
-                await statusMessage.edit(
-                  `✅ *Listed ${channels.size} channels from ${targetGuild.name}*`,
-                );
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: channelList,
-              });
-            } catch (error) {
-              console.error("   ❌ Error listing Discord channels:", error);
-
-              // Edit status message to show error
-              if (statusMessage) {
-                await statusMessage.edit(`⚠️ *Failed to list Discord channels: ${error}*`);
-              } else if (originalMessage && "send" in originalMessage.channel) {
-                await originalMessage.channel.send(
-                  `⚠️ *Failed to list Discord channels: ${error}*`,
-                );
-              }
-
-              toolResults.push({
-                tool_use_id: toolCall.id,
-                content: `Error listing Discord channels: ${error}`,
-              });
-            }
+            toolResults.push({
+              tool_use_id: toolCall.id,
+              content: result.content,
+            });
+          } else if (toolCall.name === "web_search" || toolCall.name === "code_execution") {
+            // These tools are handled by Anthropic's API automatically
+            // Add placeholder result that will be filled by the API
+            console.log(`   ⚙️ Tool '${toolCall.name}' will be handled by Anthropic API`);
+            toolResults.push({
+              tool_use_id: toolCall.id,
+              content: `[Handled by Anthropic API]`,
+            });
+          } else {
+            console.log(`   ⚠️ Unknown tool: ${toolCall.name}`);
+            toolResults.push({
+              tool_use_id: toolCall.id,
+              content: `Error: Unknown tool "${toolCall.name}"`,
+            });
           }
         }
 
@@ -762,6 +389,8 @@ export class MessageHandler {
           urlContext,
           undefined,
           true, // Keep tools enabled so Claude can use them again if needed
+          0, // retryCount
+          this.toolRegistry.getToolDefinitions(), // Pass tool definitions
         );
       } else {
         // Unexpected format
@@ -779,6 +408,8 @@ export class MessageHandler {
       urlContext,
       undefined,
       false, // Disable tools to force a text response
+      0, // retryCount
+      undefined, // No tool definitions needed when tools are disabled
     );
 
     return typeof finalResponse === "string"
