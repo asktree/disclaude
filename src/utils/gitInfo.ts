@@ -230,13 +230,14 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
       messages: [
         {
           role: "user",
-          content: `Look at this git commit and:
-1. Write ONE concise paragraph explaining what changed and why it matters
-2. Check for any CRITICAL bugs, security issues, or problems in the code changes
+          content: `Look at this git commit and write ONE concise paragraph explaining what changed and why it matters
 
 ${diffContent}
 
-Format your response as one short paragraph (2-3 sentences) capturing the essence of this change.`,
+Format your response as one short paragraph (2-3 sentences) capturing the essence of this change.
+
+Also: If (AND ONLY IF!!!!) you spot any critical issues, mention them. If you don't, there's no need to mention it.
+`,
         },
       ],
     });
