@@ -300,6 +300,19 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         formatWebSearchResults(webSearchResults);
       }
 
+      // Create map to track code execution tool uses by their IDs (needed for logging)
+      const codeExecutionMap = new Map<string, any>();
+      for (const block of response.content) {
+        const blockAny = block as any;
+        if (
+          blockAny.type === "server_tool_use" &&
+          (blockAny.name === "text_editor_code_execution" ||
+            blockAny.name === "bash_code_execution")
+        ) {
+          codeExecutionMap.set(blockAny.id, blockAny);
+        }
+      }
+
       // Log code execution results if present
       const codeExecutionResults = response.content.filter(
         (block: any) =>
@@ -356,19 +369,6 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       const urlToCitationNum = new Map<string, number>(); // Maps URL to citation number
       let citationCounter = 1;
       const generatedFiles: Array<{ name: string; content: string; mimeType?: string }> = [];
-
-      // Map to track code execution tool uses by their IDs
-      const codeExecutionMap = new Map<string, any>();
-      for (const block of response.content) {
-        const blockAny = block as any;
-        if (
-          blockAny.type === "server_tool_use" &&
-          (blockAny.name === "text_editor_code_execution" ||
-            blockAny.name === "bash_code_execution")
-        ) {
-          codeExecutionMap.set(blockAny.id, blockAny);
-        }
-      }
 
       for (const block of response.content) {
         if (block.type === "text") {
