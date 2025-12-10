@@ -10,6 +10,7 @@ services:
       - NODE_ENV=production
     volumes:
       - ./logs:/app/logs # Optional: for persistent logs
+      - ./data:/data # Mount local data directory for memories
     deploy:
       resources:
         limits:

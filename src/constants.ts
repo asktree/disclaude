@@ -19,7 +19,7 @@ export const MAX_DISCORD_MESSAGES_LIMIT = 100;
 export const DEFAULT_DISCORD_MESSAGES_LIMIT = 50;
 
 // Image Processing
-export const MAX_IMAGE_SIZE_MB = 10;
+export const MAX_IMAGE_SIZE_MB = 5; // Claude API limit is 5MB for images
 export const IMAGE_ESTIMATED_TOKENS = 1500; // Claude's approximate token count for images
 
 // URL Fetching
