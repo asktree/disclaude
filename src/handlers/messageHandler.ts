@@ -1,4 +1,4 @@
-import { Message, TextChannel, DMChannel, NewsChannel, Collection } from "discord.js";
+import { Message, TextChannel, DMChannel, NewsChannel } from "discord.js";
 import { ClaudeService } from "../services/claude";
 import { UrlFetcher } from "../services/urlFetcher";
 import { RepoReader } from "../services/repoReader";
@@ -11,20 +11,14 @@ import {
   MIN_PRESERVED_MESSAGES,
   DISCORD_MAX_MESSAGE_LENGTH,
   MAX_RECENT_MESSAGES_FOR_URL_SEARCH,
-  DEFAULT_DISCORD_MESSAGES_LIMIT,
-  MAX_DISCORD_MESSAGES_LIMIT,
-  MAX_CODE_OUTPUT_LENGTH,
 } from "../constants";
 import {
   ClaudeMessage,
   ClaudeResponse,
-  ClaudeToolCall,
   ClaudeToolResult,
   GeneratedFile,
   ChannelFetchResult,
   ChannelFetchError,
-  FetchedUrl,
-  ReadDiscordMessagesInput,
 } from "../types";
 import { ToolRegistry } from "../services/toolRegistry";
 import {
@@ -305,13 +299,6 @@ export class MessageHandler {
     while (roundCount < maxRounds) {
       // If it's a string response, we're done!
       if (typeof currentResponse === "string") {
-        if (roundCount === 0) {
-          console.log("💬 Claude responded with text (no tools needed)");
-        } else {
-          console.log(
-            `✨ Claude generated final response after ${roundCount} round(s) of tool use`,
-          );
-        }
         return currentResponse;
       }
 
