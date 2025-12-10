@@ -598,21 +598,23 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
           const arrayBuffer = await response.arrayBuffer();
 
-          // Check if the image is too large (Claude has a limit)
-          const sizeMB = arrayBuffer.byteLength / (1024 * 1024);
-          if (sizeMB > MAX_IMAGE_SIZE_MB) {
+          // Convert to base64 first
+          const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+          // Check the actual base64-encoded size against Claude's limit
+          const base64SizeBytes = base64.length;
+          const base64SizeMB = base64SizeBytes / (1024 * 1024);
+
+          if (base64SizeMB > MAX_IMAGE_SIZE_MB) {
+            const rawSizeMB = arrayBuffer.byteLength / (1024 * 1024);
             console.log(
-              `⚠️ Skipping image ${
-                attachment.name
-              }: Too large (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
+              `⚠️ Skipping image ${attachment.name}: Too large after base64 encoding (raw: ${rawSizeMB.toFixed(2)}MB, base64: ${base64SizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
             );
             return {
               type: "text",
-              text: `[Image too large to process: ${attachment.name} (${sizeMB.toFixed(2)}MB)]`,
+              text: `[Image too large to process: ${attachment.name} (${rawSizeMB.toFixed(2)}MB raw, ${base64SizeMB.toFixed(2)}MB encoded)]`,
             } as const;
           }
-
-          const base64 = Buffer.from(arrayBuffer).toString("base64");
 
           // Validate base64 is not empty
           if (!base64 || base64.length === 0) {
@@ -656,10 +658,11 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
             } as const;
           }
 
+          const rawSizeMB = arrayBuffer.byteLength / (1024 * 1024);
           console.log(
             `✅ Successfully processed image: ${
               attachment.name
-            } (${sizeMB.toFixed(2)}MB, ${mediaType})`,
+            } (raw: ${rawSizeMB.toFixed(2)}MB, base64: ${base64SizeMB.toFixed(2)}MB, ${mediaType})`,
           );
 
           return {

@@ -82,19 +82,22 @@ export class UrlFetcher {
         console.log(`🖼️ Detected image: ${url} (${contentType})`);
 
         const arrayBuffer = await response.arrayBuffer();
-        const sizeMB = arrayBuffer.byteLength / (1024 * 1024);
+        const rawSizeMB = arrayBuffer.byteLength / (1024 * 1024);
 
-        // Check size limit
-        if (sizeMB > MAX_IMAGE_SIZE_MB) {
+        // Convert to base64 first
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+        // Check the actual base64-encoded size against Claude's limit
+        const base64SizeBytes = base64.length;
+        const base64SizeMB = base64SizeBytes / (1024 * 1024);
+
+        if (base64SizeMB > MAX_IMAGE_SIZE_MB) {
           return {
             url,
-            content: `Image too large to process (${sizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
+            content: `Image too large to process (raw: ${rawSizeMB.toFixed(2)}MB, base64: ${base64SizeMB.toFixed(2)}MB > ${MAX_IMAGE_SIZE_MB}MB)`,
             isImage: true,
           };
         }
-
-        // Convert to base64
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
 
         // Determine the media type for Claude
         let mediaType = contentType;
@@ -134,7 +137,9 @@ export class UrlFetcher {
           isImage: true,
         });
 
-        console.log(`✅ Successfully fetched image: ${url} (${sizeMB.toFixed(2)}MB, ${mediaType})`);
+        console.log(
+          `✅ Successfully fetched image: ${url} (raw: ${rawSizeMB.toFixed(2)}MB, base64: ${base64SizeMB.toFixed(2)}MB, ${mediaType})`,
+        );
         return { url, content: imageContent, isImage: true };
       }
 
