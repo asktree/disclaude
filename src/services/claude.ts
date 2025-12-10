@@ -10,6 +10,7 @@ import {
 } from "../constants";
 import { ClaudeResponse, ToolDefinition, ClaudeCodeExecutionResult } from "../types";
 import { formatCodeExecutionResult, formatCitations } from "../utils/responseFormatter";
+import { createErrorAttachment } from "../utils/errorFormatter";
 
 export class ClaudeService {
   private anthropic: Anthropic;
@@ -446,16 +447,29 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
 
       console.error("Error generating Claude response:", error);
 
-      // Provide more specific error messages
+      // Create error attachment with full details
+      const errorAttachment = createErrorAttachment(error, "Error in Claude API call");
+
+      // Provide more specific error messages with error details as attachment
+      let errorMessage = "";
       if (error?.status === 500 || isOverloaded) {
-        return "Sorry, Claude's servers are temporarily overloaded. Please try again in a moment.";
+        errorMessage =
+          "Sorry, Claude's servers are temporarily overloaded. Please try again in a moment.";
       } else if (error?.status === 429) {
-        return "Sorry, we're hitting rate limits. Please wait a moment before trying again.";
+        errorMessage =
+          "Sorry, we're hitting rate limits. Please wait a moment before trying again.";
       } else if (error?.status >= 500) {
-        return "Sorry, there's a temporary issue with Claude's servers. Please try again later.";
+        errorMessage =
+          "Sorry, there's a temporary issue with Claude's servers. Please try again later.";
+      } else {
+        errorMessage = "Sorry, I encountered an error while processing your request.";
       }
 
-      return "Sorry, I encountered an error while processing your request.";
+      // Return error message with attachment
+      return {
+        text: errorMessage + " Error details are attached.",
+        files: [errorAttachment],
+      };
     }
   }
 

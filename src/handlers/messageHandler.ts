@@ -29,6 +29,7 @@ import {
   MemoryHandler,
 } from "../tools";
 import { ToolCall, ToolContext } from "../types/tool.types";
+import { createErrorAttachment } from "../utils/errorFormatter";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
@@ -280,7 +281,21 @@ export class MessageHandler {
       await this.sendResponse(message, finalResponse);
     } catch (error) {
       console.error("Error handling message:", error);
-      await message.reply("Sorry, I encountered an error processing your message.");
+
+      // Create error attachment
+      const errorAttachment = createErrorAttachment(error, "Error in handleMessage");
+
+      await message.reply({
+        content:
+          "Sorry, I encountered an error processing your message. Error details are attached.",
+        files: [
+          {
+            attachment: Buffer.from(errorAttachment.content),
+            name: errorAttachment.name,
+            description: "Error details",
+          },
+        ],
+      });
     }
   }
 
