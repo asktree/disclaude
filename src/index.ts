@@ -1,7 +1,18 @@
-import { Client, GatewayIntentBits, Events, TextChannel } from "discord.js";
+import {
+  Client,
+  GatewayIntentBits,
+  Events,
+  TextChannel,
+  REST,
+  Routes,
+  ChatInputCommandInteraction,
+  ModalSubmitInteraction,
+} from "discord.js";
 import { config } from "./config";
 import { MessageHandler } from "./handlers/messageHandler";
 import { getLatestCommitInfo, generateCommitSummary } from "./utils/gitInfo";
+import { commands, getCommandsJSON } from "./commands";
+import { UserInfoStore } from "./services/userInfoStore";
 
 class DisclaudeBot {
   private client: Client;
@@ -109,6 +120,17 @@ class DisclaudeBot {
       }
     });
 
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      // Handle slash commands
+      if (interaction.isChatInputCommand()) {
+        await this.handleSlashCommand(interaction);
+      }
+      // Handle modal submissions
+      else if (interaction.isModalSubmit()) {
+        await this.handleModalSubmit(interaction);
+      }
+    });
+
     this.client.on(Events.Error, (error) => {
       console.error("Discord client error:", error);
     });
@@ -131,6 +153,65 @@ class DisclaudeBot {
     });
   }
 
+  private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+    const command = commands.get(interaction.commandName);
+
+    if (!command) {
+      console.error(`❌ Unknown command: ${interaction.commandName}`);
+      await interaction.reply({ content: "Unknown command", ephemeral: true });
+      return;
+    }
+
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(`❌ Error executing command ${interaction.commandName}:`, error);
+      const errorMessage = "There was an error executing this command.";
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: errorMessage, ephemeral: true });
+      } else {
+        await interaction.reply({ content: errorMessage, ephemeral: true });
+      }
+    }
+  }
+
+  private async handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    if (interaction.customId === "setinfo_modal") {
+      const pronouns = interaction.fields.getTextInputValue("pronouns").trim() || undefined;
+      const bio = interaction.fields.getTextInputValue("bio").trim() || undefined;
+
+      const userInfoStore = UserInfoStore.getInstance();
+      await userInfoStore.setUserInfo(interaction.user.id, { pronouns, bio });
+
+      const parts: string[] = [];
+      if (pronouns) parts.push(`**Pronouns:** ${pronouns}`);
+      if (bio) parts.push(`**Bio:** ${bio}`);
+
+      const message =
+        parts.length > 0
+          ? `Your information has been saved:\n${parts.join("\n")}`
+          : "Your information has been cleared.";
+
+      await interaction.reply({ content: message, ephemeral: true });
+    }
+  }
+
+  private async registerCommands(): Promise<void> {
+    const rest = new REST().setToken(config.discord.token);
+
+    try {
+      console.log("🔄 Registering slash commands...");
+
+      await rest.put(Routes.applicationCommands(config.discord.clientId), {
+        body: getCommandsJSON(),
+      });
+
+      console.log("✅ Slash commands registered successfully");
+    } catch (error) {
+      console.error("❌ Error registering slash commands:", error);
+    }
+  }
+
   async start(): Promise<void> {
     try {
       // Ensure data directory exists for memory
@@ -148,6 +229,9 @@ class DisclaudeBot {
       console.log(`📝 Using Claude model: ${config.anthropic.model}`);
       console.log(`💬 Max context messages: ${config.bot.maxContextMessages}`);
       console.log(`🧠 Memory enabled: ${config.memory.enabled ? "Yes" : "No"}`);
+
+      // Register slash commands
+      await this.registerCommands();
 
       await this.client.login(config.discord.token);
     } catch (error) {

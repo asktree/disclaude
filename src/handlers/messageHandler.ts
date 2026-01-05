@@ -5,6 +5,7 @@ import { RepoReader } from "../services/repoReader";
 import { TokenCounter } from "../utils/tokenCounter";
 import { buildDiscordMessageRepresentation } from "../utils/messageFormatter";
 import { config } from "../config";
+import { UserInfoStore } from "../services/userInfoStore";
 import {
   MAX_CHANNEL_FETCH_LIMIT,
   MAX_TOOL_ROUNDS,
@@ -263,6 +264,25 @@ export class MessageHandler {
       if (channelName && channelName !== "computer-buddy-zone") {
         additionalContext +=
           "\n\nYou are currently outside of #computer-buddy-zone. You can still reply, but PLEASE limit replies to only a few sentences as this channel is reserved for human conversation. If you need more to properly answer the question, you can offer to move the conversation to #computer-buddy-zone.";
+      }
+
+      // Gather user info for people in the conversation
+      const userInfoStore = UserInfoStore.getInstance();
+      const uniqueUserIds = [...new Set(messagesArray.map((msg) => msg.author.id))].filter(
+        (id) => id !== this.botId,
+      );
+      const userIdToName = new Map<string, string>();
+      for (const msg of messagesArray) {
+        if (!userIdToName.has(msg.author.id)) {
+          const displayName =
+            msg.member?.displayName || msg.author.displayName || msg.author.username;
+          userIdToName.set(msg.author.id, displayName);
+        }
+      }
+      const userInfoMap = await userInfoStore.getUserInfoBatch(uniqueUserIds);
+      const userInfoPrompt = userInfoStore.formatUserInfoForPrompt(userInfoMap, userIdToName);
+      if (userInfoPrompt) {
+        additionalContext += userInfoPrompt;
       }
 
       // Generate response for the mention
