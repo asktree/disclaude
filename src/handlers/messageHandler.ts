@@ -256,7 +256,14 @@ export class MessageHandler {
       }
 
       // Combine URL context and linked channel context
-      const additionalContext = urlContext + linkedChannelContext;
+      let additionalContext = urlContext + linkedChannelContext;
+
+      // Add brevity instruction if not in computer-buddy-zone
+      const channelName = "name" in channel ? channel.name : null;
+      if (channelName && channelName !== "computer-buddy-zone") {
+        additionalContext +=
+          "\n\nYou are currently outside of #computer-buddy-zone. You can still reply, but PLEASE limit replies to only a few sentences as this channel is reserved for human conversation. If you need more to properly answer the question, you can offer to move the conversation to #computer-buddy-zone.";
+      }
 
       // Generate response for the mention
       const response = await this.claudeService.generateResponse(
