@@ -49,3 +49,13 @@ export const ANTHROPIC_MAX_RETRY_DELAY_MS = 10000;
 
 // Code Execution Output
 export const MAX_CODE_OUTPUT_LENGTH = 1500;
+
+// Discord Message Search (preview endpoint, opened to bots August 2025)
+export const DISCORD_SEARCH_DEFAULT_LIMIT = 10;
+export const DISCORD_SEARCH_MAX_LIMIT = 25; // Discord API hard limit
+export const DISCORD_SEARCH_MAX_OFFSET = 9975; // Discord API hard limit
+export const DISCORD_SEARCH_INDEX_RETRIES = 2; // Retries when the index returns 202
+export const DISCORD_SEARCH_INDEX_RETRY_MS = 3000;
+
+// Member Lookup
+export const FIND_USER_MAX_RESULTS = 10;

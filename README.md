@@ -10,6 +10,22 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 - **Smart Response Logic**: Decides when follow-ups are appropriate
 - **Multi-Server Support**: Works in multiple Discord servers and DMs
 - **Message Splitting**: Handles long responses by splitting them appropriately
+- **Server Search**: Claude can search the whole server by text, author, channel, or attachment type using Discord's message search API
+- **Channel & Member Lookup**: Reads channels by name, lists channels, and finds members by nickname to get their IDs
+- **Readable Names**: Server nicknames are used everywhere, and `<@user>` / `<#channel>` mentions are shown as names, not IDs
+
+## Tools Claude Can Use
+
+| Tool | What it does |
+|------|--------------|
+| `read_discord_messages` | Read recent messages from a channel, by name or ID, with before/after/around paging |
+| `search_discord_messages` | Search the server by text, author, channel, pinned state, or content type (link, image, file, ...) |
+| `list_discord_channels` | List the server's channels grouped by category |
+| `find_discord_user` | Look up a member by nickname, display name, username, or ID |
+| `fetch_url` | Fetch and read a web page |
+| `read_source_code` | Read the bot's own source |
+
+**Note on search:** Discord's guild message search endpoint opened to bots in August 2025 and is still marked as a preview by Discord. The bot needs the **Read Message History** permission in the channels it searches. If a server's search index is still warming up, Discord returns a "not ready" response and the bot retries a couple of times before giving up.
 
 ## Prerequisites
 
