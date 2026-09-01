@@ -43,7 +43,7 @@ export const ASSISTANT_MESSAGE_PREFIX_TOKENS = 5;
 export const TOOL_USE_OVERHEAD_TOKENS = 10;
 
 // Claude Models and Generation
-export const DEFAULT_CLAUDE_MODEL = "claude-opus-5";
+export const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
 export const COMMIT_SUMMARY_MODEL = "claude-haiku-4-5"; // Cheap model for startup commit summaries
 export const CLAUDE_MAX_OUTPUT_TOKENS = 8192; // Caps thinking + visible reply together
 export const CLAUDE_EFFORT = "medium"; // low | medium | high | xhigh | max

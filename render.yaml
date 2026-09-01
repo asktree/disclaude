@@ -15,7 +15,7 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false # Set in Render dashboard
       - key: CLAUDE_MODEL
-        value: claude-opus-5
+        value: claude-sonnet-5
       - key: MAX_CONTEXT_MESSAGES
         value: 20
       - key: FOLLOW_UP_TIMEOUT_MS
