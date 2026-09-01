@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { COMMIT_SUMMARY_MODEL } from "../constants";
 
 export interface FileChange {
   filename: string;
@@ -225,8 +226,8 @@ export async function generateCommitSummary(commitInfo: GitCommitInfo): Promise<
     });
 
     const response = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307", // Use Haiku for speed and cost efficiency
-      max_tokens: 200,
+      model: COMMIT_SUMMARY_MODEL, // Haiku for speed and cost efficiency
+      max_tokens: 300,
       messages: [
         {
           role: "user",

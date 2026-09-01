@@ -95,7 +95,7 @@ pnpm start
 | `DISCORD_BOT_TOKEN` | Your Discord bot token | Required |
 | `DISCORD_CLIENT_ID` | Your Discord application ID | Required |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key | Required |
-| `CLAUDE_MODEL` | Claude model to use | `claude-3-5-sonnet-20241022` |
+| `CLAUDE_MODEL` | Claude model to use | `claude-sonnet-5` |
 | `MAX_CONTEXT_MESSAGES` | Number of messages to include as context | `20` |
 | `FOLLOW_UP_TIMEOUT_MS` | How long to monitor for follow-ups (ms) | `30000` |
 | `FOLLOW_UP_MESSAGE_COUNT` | Max follow-up responses | `3` |
