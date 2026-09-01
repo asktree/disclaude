@@ -1,5 +1,9 @@
 import dotenv from "dotenv";
-import { DEFAULT_MAX_CONTEXT_MESSAGES, DEFAULT_MAX_CONTEXT_TOKENS } from "./constants";
+import {
+  DEFAULT_MAX_CONTEXT_MESSAGES,
+  DEFAULT_MAX_CONTEXT_TOKENS,
+  DEFAULT_CLAUDE_MODEL,
+} from "./constants";
 
 dotenv.config();
 
@@ -10,7 +14,7 @@ export const config = {
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY!,
-    model: process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022",
+    model: process.env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL,
   },
   bot: {
     maxContextMessages: parseInt(

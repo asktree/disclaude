@@ -7,6 +7,8 @@ import {
   ANTHROPIC_RETRY_DELAY_MS,
   ANTHROPIC_MAX_RETRY_DELAY_MS,
   MAX_IMAGE_SIZE_MB,
+  CLAUDE_MAX_OUTPUT_TOKENS,
+  CLAUDE_EFFORT,
 } from "../constants";
 import { ClaudeResponse, ToolDefinition, ClaudeCodeExecutionResult } from "../types";
 import { formatCodeExecutionResult, formatCitations } from "../utils/responseFormatter";
@@ -237,18 +239,38 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         tools = undefined;
       }
 
-      // Use beta API for memory support
+      // Use beta API for memory support and server-side refusal fallbacks.
+      // Claude 4.6+ models think by default, and max_tokens caps thinking plus the
+      // visible reply together, so this is deliberately larger than the old 2000.
       const response = await this.anthropic.beta.messages.create({
         model: model || config.anthropic.model,
-        max_tokens: 2000,
+        max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
+        thinking: { type: "adaptive" },
+        output_config: { effort: CLAUDE_EFFORT },
         system: fullSystemPrompt,
         tools: tools,
         messages: messages.map((msg) => ({
           role: msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
           content: msg.content,
         })) as Anthropic.MessageParam[],
-        betas: ["code-execution-2025-08-25", "context-management-2025-06-27"],
+        // "default" lets Anthropic pick a fallback model if the primary model's
+        // safety classifiers decline a request, instead of returning a refusal.
+        fallbacks: "default",
+        betas: [
+          "code-execution-2025-08-25",
+          "context-management-2025-06-27",
+          "server-side-fallback-2026-07-01",
+        ],
       });
+
+      // Safety classifiers can decline a request with a normal 200 and no usable content
+      if (response.stop_reason === "refusal") {
+        const details = (response as any).stop_details;
+        console.warn(
+          `⚠️ Claude declined this request (category: ${details?.category ?? "unknown"})`,
+        );
+        return "Sorry, I can't help with that one.";
+      }
 
       // Log response blocks in order for better readability
       console.log(`\n📊 Claude's response (${response.content.length} blocks):`);
