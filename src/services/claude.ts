@@ -13,6 +13,7 @@ import {
 import { ClaudeResponse, ToolDefinition, ClaudeCodeExecutionResult } from "../types";
 import { formatCodeExecutionResult, formatCitations } from "../utils/responseFormatter";
 import { createErrorAttachment } from "../utils/errorFormatter";
+import { supportsAdaptiveThinking, supportsRefusalFallbacks } from "../utils/modelCapabilities";
 
 export class ClaudeService {
   private anthropic: Anthropic;
@@ -241,28 +242,38 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         tools = undefined;
       }
 
-      // Use beta API for memory support and server-side refusal fallbacks.
-      // Claude 4.6+ models think by default, and max_tokens caps thinking plus the
-      // visible reply together, so this is deliberately larger than the old 2000.
+      const modelId = model || config.anthropic.model;
+
+      // Claude 4.6+ models support adaptive thinking and effort; older ones 400 on both.
+      // max_tokens caps thinking plus the visible reply together, so it is larger
+      // than the old 2000 either way.
+      const thinkingParams = supportsAdaptiveThinking(modelId)
+        ? { thinking: { type: "adaptive" as const }, output_config: { effort: CLAUDE_EFFORT } }
+        : {};
+
+      // "default" lets Anthropic pick a fallback model if the primary model's
+      // safety classifiers decline a request, instead of returning a refusal.
+      const fallbackParams = supportsRefusalFallbacks(modelId)
+        ? { fallbacks: "default" as const }
+        : {};
+      const betas = ["code-execution-2025-08-25", "context-management-2025-06-27"];
+      if (supportsRefusalFallbacks(modelId)) {
+        betas.push("server-side-fallback-2026-07-01");
+      }
+
+      // Use beta API for memory support
       const response = await this.anthropic.beta.messages.create({
-        model: model || config.anthropic.model,
+        model: modelId,
         max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
-        thinking: { type: "adaptive" },
-        output_config: { effort: CLAUDE_EFFORT },
+        ...thinkingParams,
+        ...fallbackParams,
         system: fullSystemPrompt,
         tools: tools,
         messages: messages.map((msg) => ({
           role: msg.role === "user" || msg.role === "assistant" ? msg.role : "user",
           content: msg.content,
         })) as Anthropic.MessageParam[],
-        // "default" lets Anthropic pick a fallback model if the primary model's
-        // safety classifiers decline a request, instead of returning a refusal.
-        fallbacks: "default",
-        betas: [
-          "code-execution-2025-08-25",
-          "context-management-2025-06-27",
-          "server-side-fallback-2026-07-01",
-        ],
+        betas,
       });
 
       // Safety classifiers can decline a request with a normal 200 and no usable content

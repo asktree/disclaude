@@ -44,3 +44,9 @@ for (const envVar of requiredEnvVars) {
     throw new Error(`Missing required environment variable: ${envVar}`);
   }
 }
+
+if (!process.env.CLAUDE_MODEL) {
+  console.log(`🤖 CLAUDE_MODEL not set, using default: ${config.anthropic.model}`);
+} else {
+  console.log(`🤖 CLAUDE_MODEL set to: ${config.anthropic.model}`);
+}
