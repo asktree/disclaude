@@ -1,4 +1,5 @@
 import { Message } from "discord.js";
+import { getDisplayName, resolveMentions } from "./discordNames";
 
 /**
  * Builds a rich text representation of a Discord message with all metadata
@@ -21,29 +22,8 @@ export async function buildDiscordMessageRepresentation(
   // Add username and timestamp
   const timestamp = msg.createdAt.toLocaleString();
 
-  // Try to get display name from multiple sources
-  let displayName = msg.author.username; // Default fallback
-
-  // If we're in a guild, try to get the member's display name
-  if (msg.guild) {
-    try {
-      // First try the message's member property
-      if (msg.member?.displayName) {
-        displayName = msg.member.displayName;
-      }
-      // If member is not populated, fetch it from the guild
-      else {
-        // Try to fetch the member data
-        const member = await msg.guild.members.fetch(msg.author.id).catch(() => null);
-        if (member?.displayName) {
-          displayName = member.displayName;
-        }
-      }
-    } catch (error) {
-      // If fetching fails, stick with username
-      console.log(`Could not fetch member data for ${msg.author.username}: ${error}`);
-    }
-  }
+  // Server nickname > global display name > username
+  const displayName = await getDisplayName(msg);
 
   content += `[${timestamp}] ${displayName}`;
 
@@ -52,10 +32,11 @@ export async function buildDiscordMessageRepresentation(
     content += " [BOT]";
   }
 
-  // Add message content if requested
+  // Add message content if requested, with <@id>/<#id> mentions turned into names
   if (includeContent) {
     if (msg.content) {
-      content += `: ${msg.content}`;
+      const readableContent = await resolveMentions(msg.content, msg.channel, msg);
+      content += `: ${readableContent}`;
     } else if (msg.attachments.size === 0 && msg.embeds.length === 0 && msg.stickers.size === 0) {
       content += ": [No text content]";
     } else {

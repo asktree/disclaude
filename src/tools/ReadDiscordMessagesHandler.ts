@@ -2,6 +2,7 @@ import { Message, TextChannel, Collection } from "discord.js";
 import { ToolHandler, ToolInput, ToolContext, ToolResult, ToolSchema } from "../types/tool.types";
 import { ClaudeService } from "../services/claude";
 import { DEFAULT_DISCORD_MESSAGES_LIMIT, MAX_DISCORD_MESSAGES_LIMIT } from "../constants";
+import { findChannelByNameOrId, isSnowflake } from "../utils/discordNames";
 
 interface ReadDiscordMessagesInput {
   channel_id?: string;
@@ -14,13 +15,14 @@ interface ReadDiscordMessagesInput {
 export class ReadDiscordMessagesHandler implements ToolHandler {
   name = "read_discord_messages";
   description =
-    "Read actual messages from a Discord channel. Returns real messages only - never make up content if this tool fails. Use list_discord_channels first to see available channels.";
+    "Read actual messages from a Discord channel, by channel name or ID. Returns real messages only - never make up content if this tool fails. Use list_discord_channels if you are unsure which channels exist, or search_discord_messages to find something specific.";
   input_schema: ToolSchema = {
     type: "object",
     properties: {
       channel_id: {
         type: "string",
-        description: "The Discord channel ID. If not provided, uses the current channel",
+        description:
+          "The Discord channel to read, by ID or by name (e.g. 'general'). If not provided, uses the current channel",
       },
       limit: {
         type: "integer",
@@ -89,23 +91,49 @@ export class ReadDiscordMessagesHandler implements ToolHandler {
         around_message_id,
       } = input as ReadDiscordMessagesInput;
 
-      // Use current channel if not specified
-      const targetChannelId = channel_id || originalMessage?.channelId;
+      // Resolve the target channel: name or ID given by Claude, else the current channel
+      let targetChannelId: string | undefined;
+      let targetChannelName: string | undefined;
+      if (channel_id) {
+        if (isSnowflake(channel_id)) {
+          targetChannelId = channel_id;
+        } else if (originalMessage?.guild) {
+          const found = findChannelByNameOrId(originalMessage.guild, channel_id);
+          if (!found) {
+            throw new Error(
+              `Channel "${channel_id}" not found. Use list_discord_channels to see available channels.`,
+            );
+          }
+          targetChannelId = found.id;
+          targetChannelName = found.name;
+        } else {
+          throw new Error("Channel names can only be resolved inside a server");
+        }
+      } else {
+        targetChannelId = originalMessage?.channelId;
+      }
 
       if (!targetChannelId) {
         throw new Error("No channel ID provided and current channel not available");
       }
 
-      console.log(
-        `   📜 Reading Discord messages from channel ${targetChannelId} (limit: ${limit})`,
-      );
+      // Prefer a human-readable channel label for logs and status messages
+      const cachedChannel = originalMessage?.client.channels.cache.get(targetChannelId);
+      if (!targetChannelName && cachedChannel && "name" in cachedChannel && cachedChannel.name) {
+        targetChannelName = cachedChannel.name;
+      }
+      const channelLabel = channel_id
+        ? targetChannelName
+          ? `#${targetChannelName}`
+          : `<#${targetChannelId}>`
+        : "this channel";
+
+      console.log(`   📜 Reading Discord messages from ${channelLabel} (limit: ${limit})`);
 
       // Send initial status message to Discord
       if (originalMessage && "send" in originalMessage.channel) {
         statusMessage = await originalMessage.channel.send(
-          `📜 *Reading ${limit} messages from ${
-            channel_id ? `channel <#${channel_id}>` : "this channel"
-          }...*`,
+          `📜 *Reading ${limit} messages from ${channelLabel}...*`,
         );
       }
 
@@ -200,11 +228,7 @@ export class ReadDiscordMessagesHandler implements ToolHandler {
 
       // Edit the status message to show completion
       if (statusMessage) {
-        await statusMessage.edit(
-          `✅ *Read ${messageArray.length} messages from ${
-            channel_id ? `<#${channel_id}>` : "this channel"
-          }*`,
-        );
+        await statusMessage.edit(`✅ *Read ${messageArray.length} messages from ${channelLabel}*`);
       }
 
       return {

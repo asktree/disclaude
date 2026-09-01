@@ -1,4 +1,1 @@
-show cladue channel names when he's doing the message reading tool. and let him look up channel names.
-
-replace discord usernames with in-server nicknames
 

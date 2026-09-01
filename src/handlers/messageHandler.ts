@@ -27,6 +27,8 @@ import {
   FetchUrlHandler,
   ReadDiscordMessagesHandler,
   ListDiscordChannelsHandler,
+  SearchDiscordMessagesHandler,
+  FindDiscordUserHandler,
   MemoryHandler,
 } from "../tools";
 import { ToolCall, ToolContext } from "../types/tool.types";
@@ -58,6 +60,8 @@ export class MessageHandler {
     this.toolRegistry.register(new FetchUrlHandler(this.urlFetcher));
     this.toolRegistry.register(new ReadDiscordMessagesHandler(this.claudeService));
     this.toolRegistry.register(new ListDiscordChannelsHandler());
+    this.toolRegistry.register(new SearchDiscordMessagesHandler());
+    this.toolRegistry.register(new FindDiscordUserHandler());
 
     // Register memory handler if memory is enabled
     if (config.memory.enabled) {
