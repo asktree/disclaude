@@ -15,11 +15,11 @@ import {
   CACHE_CLEANUP_INTERVAL_MS,
   MAX_TWEETS_PER_MESSAGE,
   TWEET_DELETE_EMOJIS,
-  TWEET_DELETE_HINT_EMOJI,
   TWEET_EMBED_COLOR,
   TWEET_MAX_GALLERY_IMAGES,
   TWEET_MAX_VIDEO_LINKS,
   TWEET_QUOTE_TEXT_MAX_LENGTH,
+  TWEET_REMOVAL_HINT,
   TWEET_TEXT_MAX_LENGTH,
   TWEET_USER_RATE_LIMIT,
   TWEET_USER_RATE_WINDOW_MS,
@@ -98,7 +98,6 @@ export class TweetEmbedHandler {
       const results = await Promise.all(toFetch.map((link) => fetchTweet(link)));
       if (state.cancelled) return;
 
-      const expandedIds = new Set<string>();
       const failures: string[] = [];
       let posted = 0;
 
@@ -111,7 +110,7 @@ export class TweetEmbedHandler {
           continue;
         }
 
-        const { embeds, content } = this.buildEmbeds(result.tweet);
+        const { embeds, content } = this.buildEmbeds(result.tweet, message.author.id);
         const sent = await this.safeReply(message, { content, embeds });
         if (!sent) continue;
 
@@ -128,12 +127,7 @@ export class TweetEmbedHandler {
           authorId: message.author.id,
           createdAt: Date.now(),
         });
-        expandedIds.add(link.id);
         posted++;
-
-        if (!perms || perms.has(PermissionFlagsBits.AddReactions)) {
-          await sent.react(TWEET_DELETE_HINT_EMOJI).catch(() => undefined);
-        }
       }
 
       if (posted === 0) {
@@ -145,13 +139,11 @@ export class TweetEmbedHandler {
         return;
       }
 
-      // Hide the original (usually broken) X preview, but only when every link
-      // in the message was one we replaced; suppression is message-wide.
-      const onlyExpandedLinks = allUrls.every((url) => {
-        const parsed = parseTweetUrl(url);
-        return parsed !== null && expandedIds.has(parsed.id);
-      });
-      if (onlyExpandedLinks && (!perms || perms.has(PermissionFlagsBits.ManageMessages))) {
+      // Hide the original (usually broken) X preview now that ours is up.
+      // Suppression is message-wide, so leave it alone if the message also
+      // carries non-tweet links whose previews we'd otherwise wipe out.
+      const onlyTweetLinks = allUrls.every((url) => parseTweetUrl(url) !== null);
+      if (onlyTweetLinks && (!perms || perms.has(PermissionFlagsBits.ManageMessages))) {
         await message.suppressEmbeds(true).catch(() => undefined);
       }
     } finally {
@@ -213,7 +205,7 @@ export class TweetEmbedHandler {
   // Embed construction
   // ---------------------------------------------------------------------------
 
-  private buildEmbeds(tweet: FxTweet): { embeds: APIEmbed[]; content?: string } {
+  private buildEmbeds(tweet: FxTweet, posterId: string): { embeds: APIEmbed[]; content: string } {
     const embeds: APIEmbed[] = [];
     const contentLines: string[] = [];
 
@@ -286,7 +278,14 @@ export class TweetEmbedHandler {
     if (main.fields!.length === 0) delete main.fields;
 
     embeds.unshift(main);
-    return { embeds, content: contentLines.length > 0 ? contentLines.join("\n") : undefined };
+    // Small-text hint aimed at the poster. Rendered as a mention but never
+    // pings, since replies go out with all mentions disabled.
+    contentLines.push(this.removalHint(posterId));
+    return { embeds, content: contentLines.join("\n") };
+  }
+
+  private removalHint(posterId: string): string {
+    return `-# <@${posterId}> ${TWEET_REMOVAL_HINT}`;
   }
 
   private formatMainText(tweet: FxTweet): string {
@@ -333,7 +332,7 @@ export class TweetEmbedHandler {
     if (tweet.retweets != null) stats.push(`🔁 ${this.compact(tweet.retweets)}`);
     if (tweet.replies != null) stats.push(`💬 ${this.compact(tweet.replies)}`);
     if (tweet.views != null) stats.push(`👁️ ${this.compact(tweet.views)}`);
-    return `X  ·  ${stats.join("  ")}  ·  ${TWEET_DELETE_HINT_EMOJI} to remove`;
+    return stats.length > 0 ? `X  ·  ${stats.join("  ")}` : "X";
   }
 
   private compact(n: number): string {
@@ -438,16 +437,14 @@ export class TweetEmbedHandler {
   /**
    * Only our tweet embeds are removable this way, never ordinary Claude replies
    * that happen to carry a link preview. Tracked messages are known; otherwise
-   * look for our own footer marker on an embed that points at a tweet.
+   * look for our own removal hint alongside an embed that points at a tweet.
    */
   private isTweetEmbedMessage(message: Message): boolean {
     if (this.store.getByBotMessage(message.id)) return true;
+    if (!message.content.includes(TWEET_REMOVAL_HINT)) return false;
     return message.embeds.some(
       (embed: Embed) =>
-        embed.color === TWEET_EMBED_COLOR &&
-        !!embed.url &&
-        parseTweetUrl(embed.url) !== null &&
-        (embed.footer?.text ?? "").endsWith("to remove"),
+        embed.color === TWEET_EMBED_COLOR && !!embed.url && parseTweetUrl(embed.url) !== null,
     );
   }
 

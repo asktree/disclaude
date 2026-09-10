@@ -83,5 +83,7 @@ export const DISCORD_MAX_TOTAL_EMBED_LENGTH = 6000; // Sum of all text across al
 // Reacting with any of these on a bot tweet embed removes it (original poster or a mod only).
 // Compared with variation selectors stripped, so 🗑 and 🗑️ both match.
 export const TWEET_DELETE_EMOJIS = ["🗑️", "❌", "🚫", "🗑"];
-export const TWEET_DELETE_HINT_EMOJI = "🗑️";
+// Shown under each embed so the poster knows how to remove it; also doubles as
+// the marker that identifies our tweet embeds if tracking data is lost.
+export const TWEET_REMOVAL_HINT = "react 🗑️ to remove this embed";
 export const TWEET_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // How long to remember source -> embed links
