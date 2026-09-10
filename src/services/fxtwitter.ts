@@ -1,4 +1,5 @@
 import { TWEET_API_BASE_URL, TWEET_CACHE_TTL_MS, TWEET_FETCH_TIMEOUT_MS } from "../constants";
+import { config } from "../config";
 
 /**
  * Minimal typings for the FxTwitter status API.
@@ -37,10 +38,22 @@ export interface FxPoll {
   time_left_en: string;
 }
 
+export interface FxTranslation {
+  text: string;
+  source_lang: string;
+  target_lang: string;
+  /** Human-readable source language name, e.g. "Spanish" */
+  source_lang_en?: string;
+  provider?: string;
+}
+
 export interface FxTweet {
   id: string;
   url: string;
   text: string;
+  lang?: string | null;
+  /** Only present when a translation was requested and the post needed one */
+  translation?: FxTranslation;
   created_at: string;
   created_timestamp: number;
   author: FxAuthor;
@@ -155,7 +168,9 @@ export function fetchTweet(link: TweetLink): Promise<FxFetchResult> {
 }
 
 async function fetchTweetUncached(link: TweetLink): Promise<FxFetchResult> {
-  const apiUrl = `${TWEET_API_BASE_URL}/${link.screenName}/status/${link.id}`;
+  // Appending a language code asks FxTwitter to translate the post as well.
+  const translate = config.tweets.translateTo;
+  const apiUrl = `${TWEET_API_BASE_URL}/${link.screenName}/status/${link.id}${translate ? `/${translate}` : ""}`;
 
   try {
     const response = await fetch(apiUrl, {

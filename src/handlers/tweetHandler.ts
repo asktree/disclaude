@@ -289,14 +289,22 @@ export class TweetEmbedHandler {
   }
 
   private formatMainText(tweet: FxTweet): string {
-    let text = tweet.text?.trim() ?? "";
+    let text = this.truncate(tweet.text?.trim() ?? "", TWEET_TEXT_MAX_LENGTH);
     if (tweet.replying_to) {
       const replyUrl = tweet.replying_to_status
         ? `https://x.com/${tweet.replying_to}/status/${tweet.replying_to_status}`
         : `https://x.com/${tweet.replying_to}`;
       text = `*Replying to [@${tweet.replying_to}](${replyUrl})*\n${text}`;
     }
-    return this.truncate(text, TWEET_TEXT_MAX_LENGTH) || "​";
+
+    // Like X's own "Translate post": original first, translation underneath.
+    const t = tweet.translation;
+    if (t?.text && t.source_lang !== t.target_lang && t.text.trim() !== tweet.text?.trim()) {
+      const from = t.source_lang_en || t.source_lang.toUpperCase();
+      text += `\n\n🌐 **Translated from ${from}:**\n${this.truncate(t.text.trim(), TWEET_TEXT_MAX_LENGTH)}`;
+    }
+
+    return text || "​";
   }
 
   private formatQuote(quote: FxTweet): { name: string; value: string } {

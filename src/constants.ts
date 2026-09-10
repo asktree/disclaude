@@ -69,6 +69,7 @@ export const FIND_USER_MAX_RESULTS = 10;
 // Tweet Embeds (fxtwitter-style link expansion)
 export const TWEET_API_BASE_URL = "https://api.fxtwitter.com";
 export const TWEET_FETCH_TIMEOUT_MS = 10000;
+export const TWEET_DEFAULT_TRANSLATE_TO = "en"; // 2-letter ISO code; "" disables translation
 export const TWEET_CACHE_TTL_MS = 10 * 60 * 1000; // Cache fetched posts (and coalesce in-flight fetches)
 export const MAX_TWEETS_PER_MESSAGE = 3;
 export const TWEET_USER_RATE_LIMIT = 5; // Expansions per user per window
