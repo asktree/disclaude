@@ -100,7 +100,11 @@ export class MessageHandler {
       // Check if any messages have images
       // Note: Discord returns messages in reverse chronological order (newest first)
       // We reverse them to chronological order (oldest first) for proper context
-      const messagesArray = Array.from(contextMessages.values()).reverse();
+      // Anything posted after the triggering message (e.g. a tweet embed reply
+      // from this bot that raced ahead) must not become the trailing turn.
+      const messagesArray = Array.from(contextMessages.values())
+        .reverse()
+        .filter((msg) => msg.id === message.id || BigInt(msg.id) < BigInt(message.id));
 
       // Check for channel mentions and auto-fetch their messages
       const channelMentions = message.content.match(/<#(\d+)>/g);
