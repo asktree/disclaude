@@ -30,7 +30,6 @@ class DisclaudeBot {
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.DirectMessageReactions,
       ],
       // Reactions on messages sent before this process started arrive as partials
       partials: [Partials.Message, Partials.Reaction, Partials.User],
@@ -111,7 +110,9 @@ class DisclaudeBot {
       // Initialize message handler with bot ID
       this.messageHandler = new MessageHandler(readyClient.user.id);
       if (config.tweets.enabled) {
-        this.tweetHandler = new TweetEmbedHandler(readyClient.user.id);
+        const tweetHandler = new TweetEmbedHandler(readyClient.user.id);
+        await tweetHandler.init();
+        this.tweetHandler = tweetHandler;
         console.log("🐦 Tweet embeds enabled");
       }
 
@@ -147,6 +148,12 @@ class DisclaudeBot {
     this.client.on(Events.MessageDelete, async (message) => {
       if (this.tweetHandler) {
         await this.tweetHandler.handleMessageDelete(message);
+      }
+    });
+
+    this.client.on(Events.MessageBulkDelete, async (messages) => {
+      if (this.tweetHandler) {
+        await this.tweetHandler.handleMessageBulkDelete(messages.values());
       }
     });
 

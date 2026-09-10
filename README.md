@@ -30,13 +30,13 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 
 ## Tweet Embeds
 
-Discord no longer renders X links well, so the bot expands them itself using the [FxTwitter API](https://github.com/FxEmbed/FxEmbed/wiki/Status-Fetch-API) (no Twitter API key needed). This runs for every message, whether or not the bot is mentioned, and never involves Claude.
+Discord no longer renders X links well, so the bot expands them itself using the [FxTwitter API](https://github.com/FxEmbed/FxEmbed/wiki/Status-Fetch-API) (no Twitter API key needed). This runs in server channels for every message, whether or not the bot is mentioned, and never involves Claude.
 
-- Works with `x.com`, `twitter.com`, and the `fxtwitter` / `vxtwitter` / `fixupx` mirror domains. Up to 3 links per message.
+- Works with `x.com`, `twitter.com`, and the `fxtwitter` / `vxtwitter` / `fixupx` mirror domains. Up to 3 links per message, one reply per link, and at most 5 expansions per person per minute.
 - Wrap a link in `<angle brackets>` to opt out, same as Discord's own embed suppression.
-- Quote tweets are shown as a field under the main post; multiple photos become a gallery; videos are posted as a playable link.
-- **Removing an embed:** the person who posted the link can react with 🗑️, ❌, or 🚫 on the bot's reply to delete it (the bot pre-adds 🗑️ so it's one click). Anyone with **Manage Messages** in that channel can do the same. Deleting your original message also removes the embed.
-- The bot needs **Embed Links** and **Add Reactions**. Give it **Manage Messages** too if you want it to hide the broken embed on the original message.
+- Quote tweets are shown as a field under the main post; multiple photos are stitched into one image; videos are posted as a playable link.
+- **Removing an embed:** the person who posted the link can react with 🗑️, ❌, or 🚫 on the bot's reply to delete it (the bot pre-adds 🗑️ so it's one click). Anyone with **Manage Messages** in that channel can do the same. Deleting your original message also removes the embed, including after a bot restart.
+- The bot needs **Embed Links** and **Add Reactions**. Give it **Manage Messages** too if you want it to hide the broken X preview on the original message (only done when the message contains nothing but tweet links).
 - Set `TWEET_EMBEDS=false` to turn the feature off.
 
 ## Prerequisites
@@ -56,7 +56,6 @@ Discord no longer renders X links well, so the bot expands them itself using the
 5. Under "Privileged Gateway Intents", enable:
    - Message Content Intent
    - Server Members Intent
-   - (Reactions do not need a privileged intent)
 6. Copy the Application ID from "General Information" section
 
 ### 2. Add Bot to Your Server

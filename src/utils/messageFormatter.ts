@@ -11,9 +11,13 @@ export async function buildDiscordMessageRepresentation(
   botId: string,
   includeContent: boolean = true,
 ): Promise<string> {
-  // For assistant messages, just return the content without any metadata
+  // For assistant messages, just return the content without any metadata.
+  // Embed-only bot messages (tweet embeds) are rendered as text so later
+  // conversations can see what was posted.
   if (msg.author.id === botId) {
-    return msg.content || "[No text content]";
+    if (msg.content) return msg.content;
+    if (msg.embeds.length > 0) return formatOwnEmbeds(msg);
+    return "[No text content]";
   }
 
   // For user messages, include all metadata
@@ -180,4 +184,23 @@ export async function buildDiscordMessageRepresentation(
   }
 
   return content;
+}
+
+/**
+ * Compact text rendering of the bot's own embeds (used for tweet embed replies)
+ */
+function formatOwnEmbeds(msg: Message): string {
+  const parts: string[] = [];
+  for (const embed of msg.embeds) {
+    if (!embed.description && !embed.author?.name && embed.fields.length === 0) continue;
+    let part = "[Embed";
+    if (embed.url) part += ` of ${embed.url}`;
+    part += "]";
+    if (embed.author?.name) part += `\n${embed.author.name}`;
+    if (embed.description) part += `\n${embed.description}`;
+    for (const field of embed.fields) part += `\n${field.name}\n${field.value}`;
+    if (embed.image?.url) part += `\nImage: ${embed.image.url}`;
+    parts.push(part);
+  }
+  return parts.length > 0 ? parts.join("\n\n") : "[No text content]";
 }

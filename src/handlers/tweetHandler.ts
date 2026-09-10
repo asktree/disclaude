@@ -1,35 +1,36 @@
 import {
   APIEmbed,
+  Embed,
+  GuildTextBasedChannel,
   Message,
   MessageReaction,
   PartialMessage,
   PartialMessageReaction,
   PartialUser,
   PermissionFlagsBits,
+  PermissionsBitField,
   User,
 } from "discord.js";
 import {
+  CACHE_CLEANUP_INTERVAL_MS,
   MAX_TWEETS_PER_MESSAGE,
   TWEET_DELETE_EMOJIS,
+  TWEET_DELETE_HINT_EMOJI,
   TWEET_EMBED_COLOR,
-  TWEET_LINK_TTL_MS,
   TWEET_MAX_GALLERY_IMAGES,
+  TWEET_MAX_VIDEO_LINKS,
   TWEET_QUOTE_TEXT_MAX_LENGTH,
   TWEET_TEXT_MAX_LENGTH,
-  CACHE_CLEANUP_INTERVAL_MS,
+  TWEET_USER_RATE_LIMIT,
+  TWEET_USER_RATE_WINDOW_MS,
 } from "../constants";
-import { extractTweetLinks, fetchTweet, FxTweet } from "../services/fxtwitter";
+import { extractTweetLinks, fetchTweet, FxTweet, parseTweetUrl } from "../services/fxtwitter";
+import { TweetLinkStore } from "../services/tweetLinkStore";
 
-const DISCORD_MAX_EMBEDS_PER_MESSAGE = 10;
-const DELETE_HINT_EMOJI = "🗑️";
+const DISCORD_UNKNOWN_MESSAGE = 10008;
 
-interface EmbedLink {
-  sourceMessageId: string;
-  botMessageId: string;
-  channelId: string;
-  /** The Discord user who posted the original link */
-  authorId: string;
-  createdAt: number;
+interface PendingExpansion {
+  cancelled: boolean;
 }
 
 /**
@@ -38,32 +39,31 @@ interface EmbedLink {
  *
  * This is deliberately independent from the Claude conversation flow: it never
  * calls the model, and it runs for every message whether or not the bot is
- * mentioned.
+ * mentioned. One reply is posted per tweet link so each can be removed on its
+ * own and never runs into Discord's per-message embed limits.
  */
 export class TweetEmbedHandler {
   private botId: string;
-  private bySource = new Map<string, EmbedLink>();
-  private byBotMessage = new Map<string, EmbedLink>();
+  private store: TweetLinkStore;
+  /** Source messages whose expansion is still in flight, so a delete can cancel it */
+  private pending = new Map<string, PendingExpansion>();
+  private userActivity = new Map<string, number[]>();
   private cleanupInterval: NodeJS.Timeout;
 
-  constructor(botId: string) {
+  constructor(botId: string, store = new TweetLinkStore()) {
     this.botId = botId;
-    this.cleanupInterval = setInterval(() => this.prune(), CACHE_CLEANUP_INTERVAL_MS);
+    this.store = store;
+    this.cleanupInterval = setInterval(() => this.store.prune(), CACHE_CLEANUP_INTERVAL_MS);
     this.cleanupInterval.unref();
+  }
+
+  async init(): Promise<void> {
+    await this.store.load();
   }
 
   destroy(): void {
     clearInterval(this.cleanupInterval);
-  }
-
-  private prune(): void {
-    const cutoff = Date.now() - TWEET_LINK_TTL_MS;
-    for (const [id, link] of this.bySource) {
-      if (link.createdAt < cutoff) {
-        this.bySource.delete(id);
-        this.byBotMessage.delete(link.botMessageId);
-      }
-    }
+    this.store.destroy();
   }
 
   // ---------------------------------------------------------------------------
@@ -74,63 +74,122 @@ export class TweetEmbedHandler {
     if (message.author.bot || message.author.id === this.botId) return;
     if (!message.content) return;
 
-    const links = extractTweetLinks(message.content);
-    if (links.length === 0) return;
+    const { tweets, allUrls } = extractTweetLinks(message.content);
+    if (tweets.length === 0) return;
 
-    const toFetch = links.slice(0, MAX_TWEETS_PER_MESSAGE);
-    console.log(`🐦 Found ${links.length} tweet link(s) in message ${message.id}`);
-
-    const results = await Promise.all(toFetch.map((link) => fetchTweet(link)));
-
-    const embeds: APIEmbed[] = [];
-    const contentLines: string[] = [];
-    const failures: string[] = [];
-
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      if (!result.ok) {
-        console.log(`   ⚠️ Could not expand ${toFetch[i].url}: ${result.message}`);
-        if (result.reason !== "error") failures.push(result.message);
-        continue;
-      }
-
-      const built = this.buildEmbeds(result.tweet);
-      const room = DISCORD_MAX_EMBEDS_PER_MESSAGE - embeds.length;
-      embeds.push(...built.embeds.slice(0, room));
-      if (built.videoUrl) contentLines.push(built.videoUrl);
-    }
-
-    if (embeds.length === 0) {
-      // Nothing to show. Private/deleted posts get a short note so the poster
-      // knows the link is dead; transient API errors stay silent.
-      if (failures.length > 0) {
-        await this.safeReply(message, { content: `🐦 ${failures[0]}.` });
-      }
+    if (!this.withinRateLimit(message.author.id)) {
+      console.log(`🐦 Rate limit: skipping tweet links from ${message.author.id}`);
       return;
     }
 
-    const sent = await this.safeReply(message, {
-      content: contentLines.length > 0 ? contentLines.join("\n") : undefined,
-      embeds,
-    });
-    if (!sent) return;
+    const perms = this.botPermissions(message);
+    if (perms && !this.canPost(perms, message)) {
+      console.log(`🐦 Missing send/embed permission in ${message.channelId}, skipping`);
+      return;
+    }
 
-    const link: EmbedLink = {
-      sourceMessageId: message.id,
-      botMessageId: sent.id,
-      channelId: message.channelId,
-      authorId: message.author.id,
-      createdAt: Date.now(),
-    };
-    this.bySource.set(message.id, link);
-    this.byBotMessage.set(sent.id, link);
+    const toFetch = tweets.slice(0, MAX_TWEETS_PER_MESSAGE);
+    console.log(`🐦 Found ${tweets.length} tweet link(s) in message ${message.id}`);
 
-    // Best-effort niceties: hide the original (usually broken) X embed, and
-    // pre-add the delete reaction so the poster can remove ours in one click.
-    await Promise.all([
-      message.suppressEmbeds(true).catch(() => undefined),
-      sent.react(DELETE_HINT_EMOJI).catch(() => undefined),
-    ]);
+    const state: PendingExpansion = { cancelled: false };
+    this.pending.set(message.id, state);
+
+    try {
+      const results = await Promise.all(toFetch.map((link) => fetchTweet(link)));
+      if (state.cancelled) return;
+
+      const expandedIds = new Set<string>();
+      const failures: string[] = [];
+      let posted = 0;
+
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const link = toFetch[i];
+        if (!result.ok) {
+          console.log(`   ⚠️ Could not expand ${link.url}: ${result.message}`);
+          if (result.reason !== "error") failures.push(result.message);
+          continue;
+        }
+
+        const { embeds, content } = this.buildEmbeds(result.tweet);
+        const sent = await this.safeReply(message, { content, embeds });
+        if (!sent) continue;
+
+        if (state.cancelled) {
+          // Source vanished while we were posting; don't leave an orphan.
+          await sent.delete().catch(() => undefined);
+          return;
+        }
+
+        this.store.add({
+          sourceMessageId: message.id,
+          botMessageId: sent.id,
+          channelId: message.channelId,
+          authorId: message.author.id,
+          createdAt: Date.now(),
+        });
+        expandedIds.add(link.id);
+        posted++;
+
+        if (!perms || perms.has(PermissionFlagsBits.AddReactions)) {
+          await sent.react(TWEET_DELETE_HINT_EMOJI).catch(() => undefined);
+        }
+      }
+
+      if (posted === 0) {
+        // Nothing to show. Private/deleted posts get a short note so the poster
+        // knows the link is dead; transient API errors stay silent.
+        if (failures.length > 0) {
+          await this.safeReply(message, { content: `🐦 ${failures[0]}.` });
+        }
+        return;
+      }
+
+      // Hide the original (usually broken) X preview, but only when every link
+      // in the message was one we replaced; suppression is message-wide.
+      const onlyExpandedLinks = allUrls.every((url) => {
+        const parsed = parseTweetUrl(url);
+        return parsed !== null && expandedIds.has(parsed.id);
+      });
+      if (onlyExpandedLinks && (!perms || perms.has(PermissionFlagsBits.ManageMessages))) {
+        await message.suppressEmbeds(true).catch(() => undefined);
+      }
+    } finally {
+      this.pending.delete(message.id);
+    }
+  }
+
+  private withinRateLimit(userId: string): boolean {
+    const now = Date.now();
+    const recent = (this.userActivity.get(userId) ?? []).filter(
+      (t) => now - t < TWEET_USER_RATE_WINDOW_MS,
+    );
+    if (recent.length >= TWEET_USER_RATE_LIMIT) {
+      this.userActivity.set(userId, recent);
+      return false;
+    }
+    recent.push(now);
+    this.userActivity.set(userId, recent);
+    if (this.userActivity.size > 1000) {
+      for (const [id, times] of this.userActivity) {
+        if (times.every((t) => now - t >= TWEET_USER_RATE_WINDOW_MS)) this.userActivity.delete(id);
+      }
+    }
+    return true;
+  }
+
+  /** Effective permissions for the bot in this channel, or null outside guilds. */
+  private botPermissions(message: Message): Readonly<PermissionsBitField> | null {
+    const me = message.guild?.members.me;
+    if (!me || !message.inGuild()) return null;
+    return (message.channel as GuildTextBasedChannel).permissionsFor(me);
+  }
+
+  private canPost(perms: Readonly<PermissionsBitField>, message: Message): boolean {
+    const sendFlag = message.channel.isThread()
+      ? PermissionFlagsBits.SendMessagesInThreads
+      : PermissionFlagsBits.SendMessages;
+    return perms.has([PermissionFlagsBits.ViewChannel, sendFlag, PermissionFlagsBits.EmbedLinks]);
   }
 
   private async safeReply(
@@ -141,7 +200,8 @@ export class TweetEmbedHandler {
       return await message.reply({
         ...payload,
         allowedMentions: { parse: [], repliedUser: false },
-        failIfNotExists: false,
+        // If the source message is already gone, don't post at all.
+        failIfNotExists: true,
       });
     } catch (error) {
       console.error("❌ Failed to post tweet embed:", error);
@@ -153,9 +213,9 @@ export class TweetEmbedHandler {
   // Embed construction
   // ---------------------------------------------------------------------------
 
-  private buildEmbeds(tweet: FxTweet): { embeds: APIEmbed[]; videoUrl?: string } {
+  private buildEmbeds(tweet: FxTweet): { embeds: APIEmbed[]; content?: string } {
     const embeds: APIEmbed[] = [];
-    let videoUrl: string | undefined;
+    const contentLines: string[] = [];
 
     const authorName = `${tweet.author.name} (@${tweet.author.screen_name})`;
     const main: APIEmbed = {
@@ -172,18 +232,31 @@ export class TweetEmbedHandler {
       footer: { text: this.formatFooter(tweet) },
     };
 
-    // Media: photos become an image gallery; videos get a thumbnail plus the
-    // raw mp4 in message content, which Discord renders as a playable video.
+    // Photos: FxTwitter's stitched mosaic when there are several (renders the
+    // same everywhere), otherwise the single photo. Fall back to the same-URL
+    // multi-embed gallery trick if no mosaic was provided.
     const photos = tweet.media?.photos ?? [];
     const videos = tweet.media?.videos ?? [];
-    if (photos.length > 0) {
+    const mosaic = tweet.media?.mosaic?.formats?.jpeg;
+    if (photos.length > 1 && mosaic) {
+      main.image = { url: mosaic };
+    } else if (photos.length > 0) {
       main.image = { url: photos[0].url };
       for (const photo of photos.slice(1, TWEET_MAX_GALLERY_IMAGES)) {
         embeds.push({ url: tweet.url, image: { url: photo.url } });
       }
-    } else if (videos.length > 0) {
-      main.image = { url: videos[0].thumbnail_url };
-      videoUrl = videos[0].url;
+    }
+
+    // Videos: thumbnail in the embed (if photos didn't claim the slot) and the
+    // raw mp4 in message content, which Discord renders as a playable video.
+    if (videos.length > 0) {
+      if (!main.image) main.image = { url: videos[0].thumbnail_url };
+      for (const video of videos.slice(0, TWEET_MAX_VIDEO_LINKS)) {
+        contentLines.push(video.url);
+      }
+      if (videos.length > TWEET_MAX_VIDEO_LINKS) {
+        contentLines.push(`(+${videos.length - TWEET_MAX_VIDEO_LINKS} more videos on X)`);
+      }
     }
 
     if (tweet.poll) {
@@ -213,7 +286,7 @@ export class TweetEmbedHandler {
     if (main.fields!.length === 0) delete main.fields;
 
     embeds.unshift(main);
-    return { embeds, videoUrl };
+    return { embeds, content: contentLines.length > 0 ? contentLines.join("\n") : undefined };
   }
 
   private formatMainText(tweet: FxTweet): string {
@@ -260,7 +333,7 @@ export class TweetEmbedHandler {
     if (tweet.retweets != null) stats.push(`🔁 ${this.compact(tweet.retweets)}`);
     if (tweet.replies != null) stats.push(`💬 ${this.compact(tweet.replies)}`);
     if (tweet.views != null) stats.push(`👁️ ${this.compact(tweet.views)}`);
-    return `X  ·  ${stats.join("  ")}  ·  ${DELETE_HINT_EMOJI} to remove`;
+    return `X  ·  ${stats.join("  ")}  ·  ${TWEET_DELETE_HINT_EMOJI} to remove`;
   }
 
   private compact(n: number): string {
@@ -287,13 +360,12 @@ export class TweetEmbedHandler {
       const message = reaction.message.partial ? await reaction.message.fetch() : reaction.message;
 
       if (message.author?.id !== this.botId) return;
-      if (message.embeds.length === 0 && !this.byBotMessage.has(message.id)) return;
+      if (!this.isTweetEmbedMessage(message)) return;
 
       const allowed = await this.canRemove(message, user.id);
       if (!allowed) return;
 
-      await message.delete();
-      this.forget(message.id);
+      await this.deleteBotMessage(message.channelId, message.id, message);
       console.log(`🗑️ Removed tweet embed ${message.id} at request of ${user.id}`);
     } catch (error) {
       console.error("❌ Error handling delete reaction:", error);
@@ -301,19 +373,59 @@ export class TweetEmbedHandler {
   }
 
   async handleMessageDelete(message: Message | PartialMessage): Promise<void> {
-    const link = this.bySource.get(message.id);
-    if (!link) return;
+    await this.onSourceDeleted(message.id, message);
+  }
 
-    try {
-      const channel = await message.client.channels.fetch(link.channelId);
-      if (channel && "messages" in channel) {
-        await channel.messages.delete(link.botMessageId);
-        console.log(`🗑️ Removed tweet embed ${link.botMessageId}: source message was deleted`);
+  async handleMessageBulkDelete(messages: Iterable<Message | PartialMessage>): Promise<void> {
+    for (const message of messages) {
+      // Our own replies may be in the same purge; nothing to clean up for those.
+      if (message.author?.id === this.botId) continue;
+      await this.onSourceDeleted(message.id, message);
+    }
+  }
+
+  private async onSourceDeleted(
+    sourceId: string,
+    message: Message | PartialMessage,
+  ): Promise<void> {
+    const pending = this.pending.get(sourceId);
+    if (pending) pending.cancelled = true;
+
+    const links = this.store.getBySource(sourceId);
+    if (links.length === 0) return;
+
+    for (const link of links) {
+      try {
+        const channel = await message.client.channels.fetch(link.channelId);
+        if (channel && "messages" in channel) {
+          await this.deleteBotMessage(link.channelId, link.botMessageId, channel.messages);
+          console.log(`🗑️ Removed tweet embed ${link.botMessageId}: source message was deleted`);
+        }
+      } catch (error) {
+        console.error("❌ Error removing embed for deleted message:", error);
       }
-    } catch (error) {
-      console.error("❌ Error removing embed for deleted message:", error);
-    } finally {
-      this.forget(link.botMessageId);
+    }
+  }
+
+  /**
+   * Delete one of our replies and forget it, but only forget once Discord
+   * confirms it is gone (deleted now, or already unknown).
+   */
+  private async deleteBotMessage(
+    channelId: string,
+    botMessageId: string,
+    target: Message | { delete(id: string): Promise<unknown> },
+  ): Promise<void> {
+    try {
+      if ("delete" in target && target instanceof Message) await target.delete();
+      else await (target as { delete(id: string): Promise<unknown> }).delete(botMessageId);
+      this.store.remove(botMessageId);
+    } catch (error: any) {
+      if (error?.code === DISCORD_UNKNOWN_MESSAGE) {
+        this.store.remove(botMessageId);
+        return;
+      }
+      throw error;
     }
   }
 
@@ -324,14 +436,30 @@ export class TweetEmbedHandler {
   }
 
   /**
+   * Only our tweet embeds are removable this way, never ordinary Claude replies
+   * that happen to carry a link preview. Tracked messages are known; otherwise
+   * look for our own footer marker on an embed that points at a tweet.
+   */
+  private isTweetEmbedMessage(message: Message): boolean {
+    if (this.store.getByBotMessage(message.id)) return true;
+    return message.embeds.some(
+      (embed: Embed) =>
+        embed.color === TWEET_EMBED_COLOR &&
+        !!embed.url &&
+        parseTweetUrl(embed.url) !== null &&
+        (embed.footer?.text ?? "").endsWith("to remove"),
+    );
+  }
+
+  /**
    * The original poster can always remove the embed. So can anyone who could
    * delete the message anyway (Manage Messages in that channel).
    */
   private async canRemove(botMessage: Message, userId: string): Promise<boolean> {
-    const tracked = this.byBotMessage.get(botMessage.id);
+    const tracked = this.store.getByBotMessage(botMessage.id);
     if (tracked?.authorId === userId) return true;
 
-    // Fall back to the reply reference, which survives bot restarts.
+    // Fall back to the reply reference, which survives lost tracking data.
     const referenceId = botMessage.reference?.messageId;
     if (!tracked && referenceId) {
       try {
@@ -354,12 +482,5 @@ export class TweetEmbedHandler {
     }
 
     return false;
-  }
-
-  private forget(botMessageId: string): void {
-    const link = this.byBotMessage.get(botMessageId);
-    if (!link) return;
-    this.byBotMessage.delete(botMessageId);
-    this.bySource.delete(link.sourceMessageId);
   }
 }
