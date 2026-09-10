@@ -3,6 +3,7 @@ import {
   DEFAULT_MAX_CONTEXT_MESSAGES,
   DEFAULT_MAX_CONTEXT_TOKENS,
   DEFAULT_CLAUDE_MODEL,
+  TWEET_DEFAULT_TRANSLATE_TO,
 } from "./constants";
 
 dotenv.config();
@@ -29,6 +30,10 @@ export const config = {
   },
   tweets: {
     enabled: process.env.TWEET_EMBEDS !== "false", // Default true
+    // Language to translate posts into (like X's "Translate post"). Empty string disables.
+    translateTo: (process.env.TWEET_TRANSLATE_TO ?? TWEET_DEFAULT_TRANSLATE_TO)
+      .trim()
+      .toLowerCase(),
   },
   memory: {
     dataDir:

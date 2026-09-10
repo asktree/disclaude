@@ -37,6 +37,7 @@ Discord no longer renders X links well, so the bot expands them itself using the
 - Quote tweets are shown as a field under the main post; multiple photos are stitched into one image; videos are posted as a playable link.
 - **Removing an embed:** the person who posted the link can react with 🗑️, ❌, or 🚫 on the bot's reply to delete it. Each reply carries a small hint addressed to the poster explaining this. Anyone with **Manage Messages** in that channel can do the same. Deleting your original message also removes the embed, including after a bot restart.
 - The bot needs **Embed Links**, and **Manage Messages** so it can hide the broken X preview on the original message (only done when the message contains nothing but tweet links; without the permission the X preview stays).
+- Posts in another language get a translation underneath, like X's "Translate post". `TWEET_TRANSLATE_TO` sets the target language (default `en`; set it to an empty string to disable). Quoted posts are not translated.
 - Set `TWEET_EMBEDS=false` to turn the feature off.
 
 ## Prerequisites
