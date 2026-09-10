@@ -7,9 +7,11 @@ import {
   Routes,
   ChatInputCommandInteraction,
   ModalSubmitInteraction,
+  Partials,
 } from "discord.js";
 import { config } from "./config";
 import { MessageHandler } from "./handlers/messageHandler";
+import { TweetEmbedHandler } from "./handlers/tweetHandler";
 import { getLatestCommitInfo, generateCommitSummary } from "./utils/gitInfo";
 import { commands, getCommandsJSON } from "./commands";
 import { UserInfoStore } from "./services/userInfoStore";
@@ -17,6 +19,7 @@ import { UserInfoStore } from "./services/userInfoStore";
 class DisclaudeBot {
   private client: Client;
   private messageHandler: MessageHandler | null = null;
+  private tweetHandler: TweetEmbedHandler | null = null;
 
   constructor() {
     this.client = new Client({
@@ -26,7 +29,11 @@ class DisclaudeBot {
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.DirectMessageReactions,
       ],
+      // Reactions on messages sent before this process started arrive as partials
+      partials: [Partials.Message, Partials.Reaction, Partials.User],
     });
 
     this.setupEventHandlers();
@@ -103,6 +110,10 @@ class DisclaudeBot {
 
       // Initialize message handler with bot ID
       this.messageHandler = new MessageHandler(readyClient.user.id);
+      if (config.tweets.enabled) {
+        this.tweetHandler = new TweetEmbedHandler(readyClient.user.id);
+        console.log("🐦 Tweet embeds enabled");
+      }
 
       // Set bot presence
       readyClient.user.setPresence({
@@ -115,8 +126,27 @@ class DisclaudeBot {
     });
 
     this.client.on(Events.MessageCreate, async (message) => {
+      // Tweet expansion runs independently of the Claude flow so a link with
+      // an @mention still gets both an embed and a reply.
+      if (this.tweetHandler) {
+        this.tweetHandler.handleMessage(message).catch((error) => {
+          console.error("Error in tweet handler:", error);
+        });
+      }
       if (this.messageHandler) {
         await this.messageHandler.handleMessage(message);
+      }
+    });
+
+    this.client.on(Events.MessageReactionAdd, async (reaction, user) => {
+      if (this.tweetHandler) {
+        await this.tweetHandler.handleReactionAdd(reaction, user);
+      }
+    });
+
+    this.client.on(Events.MessageDelete, async (message) => {
+      if (this.tweetHandler) {
+        await this.tweetHandler.handleMessageDelete(message);
       }
     });
 

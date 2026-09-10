@@ -13,6 +13,7 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 - **Server Search**: Claude can search the whole server by text, author, channel, or attachment type using Discord's message search API
 - **Channel & Member Lookup**: Reads channels by name, lists channels, and finds members by nickname to get their IDs
 - **Readable Names**: Server nicknames are used everywhere, and `<@user>` / `<#channel>` mentions are shown as names, not IDs
+- **Tweet Embeds**: Paste an x.com / twitter.com link and the bot replies with a proper embed (text, author, photos, video, polls, and the quoted tweet). React 🗑️ to remove it if you posted the wrong link
 
 ## Tools Claude Can Use
 
@@ -26,6 +27,17 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 | `read_source_code` | Read the bot's own source |
 
 **Note on search:** Discord's guild message search endpoint opened to bots in August 2025 and is still marked as a preview by Discord. The bot needs the **Read Message History** permission in the channels it searches. If a server's search index is still warming up, Discord returns a "not ready" response and the bot retries a couple of times before giving up.
+
+## Tweet Embeds
+
+Discord no longer renders X links well, so the bot expands them itself using the [FxTwitter API](https://github.com/FxEmbed/FxEmbed/wiki/Status-Fetch-API) (no Twitter API key needed). This runs for every message, whether or not the bot is mentioned, and never involves Claude.
+
+- Works with `x.com`, `twitter.com`, and the `fxtwitter` / `vxtwitter` / `fixupx` mirror domains. Up to 3 links per message.
+- Wrap a link in `<angle brackets>` to opt out, same as Discord's own embed suppression.
+- Quote tweets are shown as a field under the main post; multiple photos become a gallery; videos are posted as a playable link.
+- **Removing an embed:** the person who posted the link can react with 🗑️, ❌, or 🚫 on the bot's reply to delete it (the bot pre-adds 🗑️ so it's one click). Anyone with **Manage Messages** in that channel can do the same. Deleting your original message also removes the embed.
+- The bot needs **Embed Links** and **Add Reactions**. Give it **Manage Messages** too if you want it to hide the broken embed on the original message.
+- Set `TWEET_EMBEDS=false` to turn the feature off.
 
 ## Prerequisites
 
@@ -44,6 +56,7 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 5. Under "Privileged Gateway Intents", enable:
    - Message Content Intent
    - Server Members Intent
+   - (Reactions do not need a privileged intent)
 6. Copy the Application ID from "General Information" section
 
 ### 2. Add Bot to Your Server
@@ -56,6 +69,9 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
    - Send Messages
    - Read Message History
    - View Channels
+   - Embed Links
+   - Add Reactions
+   - Manage Messages (optional, lets the bot hide the broken X embed on the original message)
    - Mention Everyone (optional)
 4. Copy the generated URL and open it to add the bot to your server
 

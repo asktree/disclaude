@@ -65,3 +65,16 @@ export const DISCORD_SEARCH_INDEX_RETRY_MS = 3000;
 
 // Member Lookup
 export const FIND_USER_MAX_RESULTS = 10;
+
+// Tweet Embeds (fxtwitter-style link expansion)
+export const TWEET_API_BASE_URL = "https://api.fxtwitter.com";
+export const TWEET_FETCH_TIMEOUT_MS = 10000;
+export const MAX_TWEETS_PER_MESSAGE = 3;
+export const TWEET_TEXT_MAX_LENGTH = 1800; // Leave headroom in the 4096-char embed description
+export const TWEET_QUOTE_TEXT_MAX_LENGTH = 800; // Field values cap at 1024
+export const TWEET_EMBED_COLOR = 0x1d9bf0; // Twitter/X blue
+export const TWEET_MAX_GALLERY_IMAGES = 4; // Discord merges up to 4 same-URL embeds into a gallery
+// Reacting with any of these on a bot tweet embed removes it (original poster or a mod only).
+// Compared with variation selectors stripped, so 🗑 and 🗑️ both match.
+export const TWEET_DELETE_EMOJIS = ["🗑️", "❌", "🚫", "🗑"];
+export const TWEET_LINK_TTL_MS = 24 * 60 * 60 * 1000; // How long to remember source -> embed links

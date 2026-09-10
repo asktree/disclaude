@@ -27,6 +27,9 @@ export const config = {
     ),
     fetchUrls: process.env.FETCH_URLS !== "false", // Default true
   },
+  tweets: {
+    enabled: process.env.TWEET_EMBEDS !== "false", // Default true
+  },
   memory: {
     dataDir:
       process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT
