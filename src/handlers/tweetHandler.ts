@@ -290,18 +290,21 @@ export class TweetEmbedHandler {
 
   private formatMainText(tweet: FxTweet): string {
     let text = this.truncate(tweet.text?.trim() ?? "", TWEET_TEXT_MAX_LENGTH);
+
+    // Show the translation in place of the original, with a small note so
+    // readers know it isn't the author's own words. The original is one click
+    // away via the embed link.
+    const t = tweet.translation;
+    if (t?.text && t.source_lang !== t.target_lang && t.text.trim() !== tweet.text?.trim()) {
+      const from = t.source_lang_en || t.source_lang.toUpperCase();
+      text = `${this.truncate(t.text.trim(), TWEET_TEXT_MAX_LENGTH)}\n-# 🌐 Translated from ${from}`;
+    }
+
     if (tweet.replying_to) {
       const replyUrl = tweet.replying_to_status
         ? `https://x.com/${tweet.replying_to}/status/${tweet.replying_to_status}`
         : `https://x.com/${tweet.replying_to}`;
       text = `*Replying to [@${tweet.replying_to}](${replyUrl})*\n${text}`;
-    }
-
-    // Like X's own "Translate post": original first, translation underneath.
-    const t = tweet.translation;
-    if (t?.text && t.source_lang !== t.target_lang && t.text.trim() !== tweet.text?.trim()) {
-      const from = t.source_lang_en || t.source_lang.toUpperCase();
-      text += `\n\n🌐 **Translated from ${from}:**\n${this.truncate(t.text.trim(), TWEET_TEXT_MAX_LENGTH)}`;
     }
 
     return text || "​";
