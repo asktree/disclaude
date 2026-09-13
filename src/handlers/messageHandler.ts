@@ -33,6 +33,7 @@ import {
 } from "../tools";
 import { ToolCall, ToolContext } from "../types/tool.types";
 import { createErrorAttachment } from "../utils/errorFormatter";
+import { TweetEmbedHandler } from "./tweetHandler";
 
 export class MessageHandler {
   private claudeService: ClaudeService;
@@ -41,6 +42,7 @@ export class MessageHandler {
   private tokenCounter: TokenCounter;
   private botId: string;
   private toolRegistry: ToolRegistry;
+  private tweetHandler: TweetEmbedHandler | null = null;
 
   constructor(botId: string) {
     this.claudeService = new ClaudeService();
@@ -72,6 +74,11 @@ export class MessageHandler {
     console.log("🔧 Registered tools:", this.toolRegistry.getRegisteredTools());
   }
 
+  /** Lets the Claude flow tell tweet embed replies apart from real mentions */
+  setTweetHandler(tweetHandler: TweetEmbedHandler | null): void {
+    this.tweetHandler = tweetHandler;
+  }
+
   async handleMessage(message: Message): Promise<void> {
     // Ignore bot's own messages
     if (message.author.id === this.botId) {
@@ -83,6 +90,17 @@ export class MessageHandler {
     // Only respond if mentioned
     if (!isMentioned) {
       return;
+    }
+
+    // Replying to any bot message counts as a mention. Replies to a tweet
+    // embed are people discussing the tweet, so stay quiet unless the bot was
+    // actually @mentioned in the text.
+    const explicitlyMentioned = new RegExp(`<@!?${this.botId}>`).test(message.content);
+    if (!explicitlyMentioned && this.tweetHandler) {
+      if (await this.tweetHandler.isReplyToTweetEmbed(message)) {
+        console.log(`🐦 Ignoring reply to tweet embed (message ${message.id})`);
+        return;
+      }
     }
 
     try {

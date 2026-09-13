@@ -447,13 +447,30 @@ export class TweetEmbedHandler {
    * that happen to carry a link preview. Tracked messages are known; otherwise
    * look for our own removal hint alongside an embed that points at a tweet.
    */
-  private isTweetEmbedMessage(message: Message): boolean {
+  isTweetEmbedMessage(message: Message): boolean {
     if (this.store.getByBotMessage(message.id)) return true;
     if (!message.content.includes(TWEET_REMOVAL_HINT)) return false;
     return message.embeds.some(
       (embed: Embed) =>
         embed.color === TWEET_EMBED_COLOR && !!embed.url && parseTweetUrl(embed.url) !== null,
     );
+  }
+
+  /**
+   * True when `message` is a Discord reply to one of our tweet embeds. Used by
+   * the Claude flow: replying to a bot message pings the bot, but a reply to a
+   * tweet embed is conversation about the tweet, not a question for Claude.
+   */
+  async isReplyToTweetEmbed(message: Message): Promise<boolean> {
+    const referenceId = message.reference?.messageId;
+    if (!referenceId) return false;
+    if (this.store.getByBotMessage(referenceId)) return true;
+    try {
+      const referenced = await message.channel.messages.fetch(referenceId);
+      return referenced.author.id === this.botId && this.isTweetEmbedMessage(referenced);
+    } catch {
+      return false;
+    }
   }
 
   /**
