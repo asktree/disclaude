@@ -113,6 +113,7 @@ class DisclaudeBot {
         const tweetHandler = new TweetEmbedHandler(readyClient.user.id);
         await tweetHandler.init();
         this.tweetHandler = tweetHandler;
+        this.messageHandler.setTweetHandler(tweetHandler);
         console.log("🐦 Tweet embeds enabled");
       }
 

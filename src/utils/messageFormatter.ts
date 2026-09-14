@@ -15,9 +15,10 @@ export async function buildDiscordMessageRepresentation(
   // Embed-only bot messages (tweet embeds) are rendered as text so later
   // conversations can see what was posted.
   if (msg.author.id === botId) {
-    if (msg.content) return msg.content;
-    if (msg.embeds.length > 0) return formatOwnEmbeds(msg);
-    return "[No text content]";
+    const parts: string[] = [];
+    if (msg.content) parts.push(msg.content);
+    if (msg.embeds.length > 0) parts.push(formatOwnEmbeds(msg));
+    return parts.join("\n") || "[No text content]";
   }
 
   // For user messages, include all metadata
@@ -202,5 +203,5 @@ function formatOwnEmbeds(msg: Message): string {
     if (embed.image?.url) part += `\nImage: ${embed.image.url}`;
     parts.push(part);
   }
-  return parts.length > 0 ? parts.join("\n\n") : "[No text content]";
+  return parts.join("\n\n");
 }

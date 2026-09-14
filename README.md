@@ -30,14 +30,14 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 
 ## Tweet Embeds
 
-Discord no longer renders X links well, so the bot expands them itself using the [FxTwitter API](https://github.com/FxEmbed/FxEmbed/wiki/Status-Fetch-API) (no Twitter API key needed). This runs in server channels for every message, whether or not the bot is mentioned, and never involves Claude.
+Discord no longer renders X links well, so when someone posts one the bot replies with the same link on [fxtwitter.com](https://github.com/FxEmbed/FxEmbed), which Discord renders as the familiar FixTweet embed (text, author, quoted post, photo mosaics, playable video, polls). This runs in server channels for every message, whether or not the bot is mentioned, and never involves Claude.
 
 - Works with `x.com`, `twitter.com`, and the `fxtwitter` / `vxtwitter` / `fixupx` mirror domains. Up to 3 links per message, one reply per link, and at most 5 expansions per person per minute.
 - Wrap a link in `<angle brackets>` to opt out, same as Discord's own embed suppression.
-- Quote tweets are shown as a field under the main post; multiple photos are stitched into one image; videos are posted as a playable link.
+- Posts in another language get a "🌐 Translated from …" line above the embed. `TWEET_TRANSLATE_TO` sets the target language (default `en`; set it to an empty string to disable).
 - **Removing an embed:** the person who posted the link can react with 🗑️, ❌, or 🚫 on the bot's reply to delete it. Each reply carries a small hint addressed to the poster explaining this. Anyone with **Manage Messages** in that channel can do the same. Deleting your original message also removes the embed, including after a bot restart.
+- Replying to a tweet embed does not summon Claude; @mention the bot explicitly if you want it to weigh in.
 - The bot needs **Embed Links**, and **Manage Messages** so it can hide the broken X preview on the original message (only done when the message contains nothing but tweet links; without the permission the X preview stays).
-- Posts in another language get a translation underneath, like X's "Translate post". `TWEET_TRANSLATE_TO` sets the target language (default `en`; set it to an empty string to disable). Quoted posts are not translated.
 - Set `TWEET_EMBEDS=false` to turn the feature off.
 
 ## Prerequisites
