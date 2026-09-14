@@ -66,25 +66,20 @@ export const DISCORD_SEARCH_INDEX_RETRY_MS = 3000;
 // Member Lookup
 export const FIND_USER_MAX_RESULTS = 10;
 
-// Tweet Embeds (fxtwitter-style link expansion)
+// Tweet Embeds (links are re-posted as fxtwitter.com so Discord renders FixTweet's embed)
 export const TWEET_API_BASE_URL = "https://api.fxtwitter.com";
-export const TWEET_FETCH_TIMEOUT_MS = 10000;
+export const TWEET_FX_BASE_URL = "https://fxtwitter.com";
 export const TWEET_DEFAULT_TRANSLATE_TO = "en"; // 2-letter ISO code; "" disables translation
+export const TWEET_FETCH_TIMEOUT_MS = 10000;
 export const TWEET_CACHE_TTL_MS = 10 * 60 * 1000; // Cache fetched posts (and coalesce in-flight fetches)
 export const MAX_TWEETS_PER_MESSAGE = 3;
 export const TWEET_USER_RATE_LIMIT = 5; // Expansions per user per window
 export const TWEET_USER_RATE_WINDOW_MS = 60 * 1000;
-export const TWEET_TEXT_MAX_LENGTH = 1800; // Leave headroom in the 4096-char embed description
-export const TWEET_QUOTE_TEXT_MAX_LENGTH = 800; // Field values cap at 1024
-export const TWEET_EMBED_COLOR = 0x1d9bf0; // Twitter/X blue
-export const TWEET_MAX_GALLERY_IMAGES = 4; // Discord merges up to 4 same-URL embeds into a gallery
-export const TWEET_MAX_VIDEO_LINKS = 2; // Raw mp4 links posted in message content
-export const DISCORD_MAX_EMBEDS_PER_MESSAGE = 10;
-export const DISCORD_MAX_TOTAL_EMBED_LENGTH = 6000; // Sum of all text across all embeds in one message
-// Reacting with any of these on a bot tweet embed removes it (original poster or a mod only).
+export const TWEET_TRANSLATION_MAX_LENGTH = 1500; // Message content caps at 2000 incl. link + hint
+// Reacting with any of these on a bot tweet reply removes it (original poster or a mod only).
 // Compared with variation selectors stripped, so 🗑 and 🗑️ both match.
 export const TWEET_DELETE_EMOJIS = ["🗑️", "❌", "🚫", "🗑"];
 // Shown under each embed so the poster knows how to remove it; also doubles as
-// the marker that identifies our tweet embeds if tracking data is lost.
+// the marker that identifies our tweet replies if tracking data is lost.
 export const TWEET_REMOVAL_HINT = "react 🗑️ to remove this embed";
-export const TWEET_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // How long to remember source -> embed links
+export const TWEET_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000; // How long to remember source -> reply links

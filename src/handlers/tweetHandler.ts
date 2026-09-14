@@ -1,6 +1,4 @@
 import {
-  APIEmbed,
-  Embed,
   GuildTextBasedChannel,
   Message,
   MessageReaction,
@@ -15,12 +13,9 @@ import {
   CACHE_CLEANUP_INTERVAL_MS,
   MAX_TWEETS_PER_MESSAGE,
   TWEET_DELETE_EMOJIS,
-  TWEET_EMBED_COLOR,
-  TWEET_MAX_GALLERY_IMAGES,
-  TWEET_MAX_VIDEO_LINKS,
-  TWEET_QUOTE_TEXT_MAX_LENGTH,
+  TWEET_FX_BASE_URL,
   TWEET_REMOVAL_HINT,
-  TWEET_TEXT_MAX_LENGTH,
+  TWEET_TRANSLATION_MAX_LENGTH,
   TWEET_USER_RATE_LIMIT,
   TWEET_USER_RATE_WINDOW_MS,
 } from "../constants";
@@ -37,10 +32,15 @@ interface PendingExpansion {
  * Expands tweet links into rich embeds (fxtwitter-style) and lets the person
  * who posted the link remove the embed again by reacting with a delete emoji.
  *
+ * Rendering is delegated to FixTweet: the bot replies with an fxtwitter.com
+ * link and Discord unfurls it, which gives the familiar FixTweet embed
+ * including inline video and photo mosaics. The bot adds what FixTweet can't:
+ * a translation line, hiding the original X preview, and removal by reaction.
+ *
  * This is deliberately independent from the Claude conversation flow: it never
  * calls the model, and it runs for every message whether or not the bot is
  * mentioned. One reply is posted per tweet link so each can be removed on its
- * own and never runs into Discord's per-message embed limits.
+ * own.
  */
 export class TweetEmbedHandler {
   private botId: string;
@@ -110,8 +110,8 @@ export class TweetEmbedHandler {
           continue;
         }
 
-        const { embeds, content } = this.buildEmbeds(result.tweet, message.author.id);
-        const sent = await this.safeReply(message, { content, embeds });
+        const content = this.buildContent(result.tweet, message.author.id);
+        const sent = await this.safeReply(message, { content });
         if (!sent) continue;
 
         if (state.cancelled) {
@@ -184,10 +184,7 @@ export class TweetEmbedHandler {
     return perms.has([PermissionFlagsBits.ViewChannel, sendFlag, PermissionFlagsBits.EmbedLinks]);
   }
 
-  private async safeReply(
-    message: Message,
-    payload: { content?: string; embeds?: APIEmbed[] },
-  ): Promise<Message | null> {
+  private async safeReply(message: Message, payload: { content: string }): Promise<Message | null> {
     try {
       return await message.reply({
         ...payload,
@@ -202,149 +199,33 @@ export class TweetEmbedHandler {
   }
 
   // ---------------------------------------------------------------------------
-  // Embed construction
+  // Message construction
   // ---------------------------------------------------------------------------
 
-  private buildEmbeds(tweet: FxTweet, posterId: string): { embeds: APIEmbed[]; content: string } {
-    const embeds: APIEmbed[] = [];
-    const contentLines: string[] = [];
+  /**
+   * The reply is plain text: an fxtwitter.com link for Discord to unfurl, an
+   * optional translation, and the removal hint. The hint doubles as the marker
+   * that identifies our replies later.
+   */
+  private buildContent(tweet: FxTweet, posterId: string): string {
+    const lines = [`${TWEET_FX_BASE_URL}/${tweet.author.screen_name}/status/${tweet.id}`];
 
-    const authorName = `${tweet.author.name} (@${tweet.author.screen_name})`;
-    const main: APIEmbed = {
-      color: TWEET_EMBED_COLOR,
-      url: tweet.url,
-      author: {
-        name: authorName.slice(0, 256),
-        url: tweet.author.url || `https://x.com/${tweet.author.screen_name}`,
-        icon_url: tweet.author.avatar_url,
-      },
-      description: this.formatMainText(tweet),
-      fields: [],
-      timestamp: new Date(tweet.created_timestamp * 1000).toISOString(),
-      footer: { text: this.formatFooter(tweet) },
-    };
-
-    // Photos: FxTwitter's stitched mosaic when there are several (renders the
-    // same everywhere), otherwise the single photo. Fall back to the same-URL
-    // multi-embed gallery trick if no mosaic was provided.
-    const photos = tweet.media?.photos ?? [];
-    const videos = tweet.media?.videos ?? [];
-    const mosaic = tweet.media?.mosaic?.formats?.jpeg;
-    if (photos.length > 1 && mosaic) {
-      main.image = { url: mosaic };
-    } else if (photos.length > 0) {
-      main.image = { url: photos[0].url };
-      for (const photo of photos.slice(1, TWEET_MAX_GALLERY_IMAGES)) {
-        embeds.push({ url: tweet.url, image: { url: photo.url } });
-      }
+    // FixTweet's own translated URLs don't carry the translation through to
+    // Discord's crawler, so add it here from the API response instead.
+    const t = tweet.translation;
+    if (t?.text && t.source_lang !== t.target_lang && t.text.trim() !== tweet.text?.trim()) {
+      const from = t.source_lang_en || t.source_lang.toUpperCase();
+      lines.push(
+        `🌐 **Translated from ${from}:** ${this.truncate(t.text.trim(), TWEET_TRANSLATION_MAX_LENGTH)}`,
+      );
     }
 
-    // Videos: thumbnail in the embed (if photos didn't claim the slot) and the
-    // raw mp4 in message content, which Discord renders as a playable video.
-    if (videos.length > 0) {
-      if (!main.image) main.image = { url: videos[0].thumbnail_url };
-      for (const video of videos.slice(0, TWEET_MAX_VIDEO_LINKS)) {
-        contentLines.push(video.url);
-      }
-      if (videos.length > TWEET_MAX_VIDEO_LINKS) {
-        contentLines.push(`(+${videos.length - TWEET_MAX_VIDEO_LINKS} more videos on X)`);
-      }
-    }
-
-    if (tweet.poll) {
-      main.fields!.push(this.formatPoll(tweet.poll));
-    }
-
-    if (tweet.quote) {
-      main.fields!.push(this.formatQuote(tweet.quote));
-      const quotePhotos = tweet.quote.media?.photos ?? [];
-      const quoteVideos = tweet.quote.media?.videos ?? [];
-      if (!main.image) {
-        if (quotePhotos.length > 0) {
-          main.image = { url: quotePhotos[0].url };
-        } else if (quoteVideos.length > 0) {
-          main.image = { url: quoteVideos[0].thumbnail_url };
-        }
-      }
-    }
-
-    if (tweet.community_note?.text) {
-      main.fields!.push({
-        name: "📝 Readers added context",
-        value: this.truncate(tweet.community_note.text, TWEET_QUOTE_TEXT_MAX_LENGTH),
-      });
-    }
-
-    if (main.fields!.length === 0) delete main.fields;
-
-    embeds.unshift(main);
-    // Small-text hint aimed at the poster. Rendered as a mention but never
-    // pings, since replies go out with all mentions disabled.
-    contentLines.push(this.removalHint(posterId));
-    return { embeds, content: contentLines.join("\n") };
+    lines.push(this.removalHint(posterId));
+    return lines.join("\n");
   }
 
   private removalHint(posterId: string): string {
     return `-# <@${posterId}> ${TWEET_REMOVAL_HINT}`;
-  }
-
-  private formatMainText(tweet: FxTweet): string {
-    let text = this.truncate(tweet.text?.trim() ?? "", TWEET_TEXT_MAX_LENGTH);
-    if (tweet.replying_to) {
-      const replyUrl = tweet.replying_to_status
-        ? `https://x.com/${tweet.replying_to}/status/${tweet.replying_to_status}`
-        : `https://x.com/${tweet.replying_to}`;
-      text = `*Replying to [@${tweet.replying_to}](${replyUrl})*\n${text}`;
-    }
-
-    // Like X's own "Translate post": original first, translation underneath.
-    const t = tweet.translation;
-    if (t?.text && t.source_lang !== t.target_lang && t.text.trim() !== tweet.text?.trim()) {
-      const from = t.source_lang_en || t.source_lang.toUpperCase();
-      text += `\n\n🌐 **Translated from ${from}:**\n${this.truncate(t.text.trim(), TWEET_TEXT_MAX_LENGTH)}`;
-    }
-
-    return text || "​";
-  }
-
-  private formatQuote(quote: FxTweet): { name: string; value: string } {
-    const media: string[] = [];
-    const photos = quote.media?.photos?.length ?? 0;
-    const videos = quote.media?.videos?.length ?? 0;
-    if (photos > 0) media.push(`🖼️ ${photos} photo${photos === 1 ? "" : "s"}`);
-    if (videos > 0) media.push(`🎥 ${videos} video${videos === 1 ? "" : "s"}`);
-
-    let value = this.truncate(quote.text?.trim() ?? "", TWEET_QUOTE_TEXT_MAX_LENGTH);
-    if (media.length > 0) value += `${value ? "\n" : ""}${media.join(" · ")}`;
-    value += `\n[Open quoted post](${quote.url})`;
-
-    return {
-      name: `↩️ Quoting ${quote.author.name} (@${quote.author.screen_name})`.slice(0, 256),
-      value: value.slice(0, 1024),
-    };
-  }
-
-  private formatPoll(poll: NonNullable<FxTweet["poll"]>): { name: string; value: string } {
-    const lines = poll.choices.map((choice) => {
-      const filled = Math.round(choice.percentage / 10);
-      const bar = "█".repeat(filled) + "░".repeat(10 - filled);
-      return `${bar} ${choice.percentage}% · ${choice.label}`;
-    });
-    lines.push(`${poll.total_votes.toLocaleString()} votes · ${poll.time_left_en}`);
-    return { name: "📊 Poll", value: lines.join("\n").slice(0, 1024) };
-  }
-
-  private formatFooter(tweet: FxTweet): string {
-    const stats: string[] = [];
-    if (tweet.likes != null) stats.push(`❤️ ${this.compact(tweet.likes)}`);
-    if (tweet.retweets != null) stats.push(`🔁 ${this.compact(tweet.retweets)}`);
-    if (tweet.replies != null) stats.push(`💬 ${this.compact(tweet.replies)}`);
-    if (tweet.views != null) stats.push(`👁️ ${this.compact(tweet.views)}`);
-    return stats.length > 0 ? `X  ·  ${stats.join("  ")}` : "X";
-  }
-
-  private compact(n: number): string {
-    return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
   }
 
   private truncate(text: string, max: number): string {
@@ -443,17 +324,15 @@ export class TweetEmbedHandler {
   }
 
   /**
-   * Only our tweet embeds are removable this way, never ordinary Claude replies
-   * that happen to carry a link preview. Tracked messages are known; otherwise
-   * look for our own removal hint alongside an embed that points at a tweet.
+   * Only our tweet replies are removable this way, never ordinary Claude
+   * replies. Tracked messages are known; otherwise look for our removal hint
+   * next to a tweet link in the message text. (Discord's unfurled embed is
+   * attached asynchronously, so it is deliberately not part of the check.)
    */
   isTweetEmbedMessage(message: Message): boolean {
     if (this.store.getByBotMessage(message.id)) return true;
     if (!message.content.includes(TWEET_REMOVAL_HINT)) return false;
-    return message.embeds.some(
-      (embed: Embed) =>
-        embed.color === TWEET_EMBED_COLOR && !!embed.url && parseTweetUrl(embed.url) !== null,
-    );
+    return extractTweetLinks(message.content).tweets.length > 0;
   }
 
   /**
