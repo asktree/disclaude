@@ -4,6 +4,8 @@ import {
   DEFAULT_MAX_CONTEXT_TOKENS,
   DEFAULT_CLAUDE_MODEL,
   TWEET_DEFAULT_TRANSLATE_TO,
+  DEFAULT_LEDGER_DEVELOPER,
+  DEFAULT_LEDGER_PROJECT,
 } from "./constants";
 
 dotenv.config();
@@ -34,6 +36,18 @@ export const config = {
     translateTo: (process.env.TWEET_TRANSLATE_TO ?? TWEET_DEFAULT_TRANSLATE_TO)
       .trim()
       .toLowerCase(),
+  },
+  // Developer requests go to Ledger when LEDGER_URL and LEDGER_TOKEN are set
+  ledger: {
+    url: (process.env.LEDGER_URL || "").trim(),
+    token: (process.env.LEDGER_TOKEN || "").trim(),
+    developer: process.env.LEDGER_DEVELOPER || DEFAULT_LEDGER_DEVELOPER,
+    project: process.env.LEDGER_PROJECT || DEFAULT_LEDGER_PROJECT,
+    // Comma-separated server IDs that may file requests; empty means every server
+    guildIds: (process.env.LEDGER_GUILD_IDS || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
   },
   memory: {
     dataDir:

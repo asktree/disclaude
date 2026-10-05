@@ -30,7 +30,9 @@ import {
   SearchDiscordMessagesHandler,
   FindDiscordUserHandler,
   MemoryHandler,
+  RequestDeveloperHandler,
 } from "../tools";
+import { ledgerFromConfig } from "../services/ledger";
 import { ToolCall, ToolContext } from "../types/tool.types";
 import { createErrorAttachment } from "../utils/errorFormatter";
 
@@ -67,6 +69,12 @@ export class MessageHandler {
     if (config.memory.enabled) {
       this.toolRegistry.register(new MemoryHandler());
       console.log("🧠 Memory handler registered");
+    }
+
+    // Developer requests, only when Ledger is configured
+    const ledger = ledgerFromConfig();
+    if (ledger) {
+      this.toolRegistry.register(new RequestDeveloperHandler(ledger));
     }
 
     console.log("🔧 Registered tools:", this.toolRegistry.getRegisteredTools());
