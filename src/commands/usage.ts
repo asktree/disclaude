@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { UsageStore, totalTokens, emptyCounts, UsageCounts } from "../services/usageStore";
-import { USAGE_REPORT_MAX_ROWS } from "../constants";
+import { USAGE_REPORT_MAX_ROWS, DEV_USAGE_LOG_URL, DEV_USAGE_CACHE_MS } from "../constants";
+import { DevUsageRow, devTotals, parseDevLog } from "../utils/devUsage";
 
 export const data = new SlashCommandBuilder()
   .setName("usage")
@@ -34,13 +35,42 @@ function line(label: string, c: UsageCounts): string {
   return `**${label}**: ${money(c)}, ${fmt(totalTokens(c))} tokens (${fmt(input)} in, ${fmt(c.outputTokens)} out), ${c.requests} ${c.requests === 1 ? "call" : "calls"}${searches}`;
 }
 
+let devCache: { at: number; rows: DevUsageRow[] } | null = null;
+
+/** The dev usage log from main on GitHub, cached for a few minutes. Empty when it can't be read. */
+async function fetchDevRows(): Promise<DevUsageRow[]> {
+  if (devCache && Date.now() - devCache.at < DEV_USAGE_CACHE_MS) return devCache.rows;
+  try {
+    // Discord needs the reply within 3 seconds, so do not wait long
+    const response = await fetch(DEV_USAGE_LOG_URL, { signal: AbortSignal.timeout(1500) });
+    const rows = response.ok ? parseDevLog(await response.text()) : [];
+    devCache = { at: Date.now(), rows };
+    return rows;
+  } catch (error) {
+    console.error("❌ Error fetching dev usage log:", error);
+    return devCache?.rows ?? [];
+  }
+}
+
+function devLine(dev: ReturnType<typeof devTotals>): string {
+  const input = dev.inputTokens + dev.cacheReadTokens + dev.cacheWriteTokens;
+  const tokens = input + dev.outputTokens;
+  const usd = `$${dev.costUsd.toFixed(2)}`;
+  return `**Computer Buddy dev** (Claude Code at API prices): ${usd}, ${fmt(tokens)} tokens (${fmt(input)} in, ${fmt(dev.outputTokens)} out), ${dev.calls} ${dev.calls === 1 ? "call" : "calls"}, ${dev.sessions} ${dev.sessions === 1 ? "session" : "sessions"}`;
+}
+
 /** Builds the report text. Exported for tests. */
 export function formatReport(
   periodLabel: string,
   rows: { userId: string; name: string; counts: UsageCounts }[],
   viewerId: string,
+  dev?: ReturnType<typeof devTotals>,
 ): string {
-  if (rows.length === 0) return `No token use recorded for ${periodLabel.toLowerCase()}.`;
+  const devText = dev && dev.calls > 0 ? devLine(dev) : undefined;
+  if (rows.length === 0) {
+    const none = `No token use recorded for ${periodLabel.toLowerCase()}.`;
+    return devText ? `${none}\n${devText}` : none;
+  }
   const all = emptyCounts();
   for (const r of rows) {
     for (const k of [
@@ -56,7 +86,9 @@ export function formatReport(
     }
     if (r.counts.costEstimated) all.costEstimated = true;
   }
-  const out = [`📊 **Claude token use: ${periodLabel}**`, line("Everyone", all), ""];
+  const out = [`📊 **Claude token use: ${periodLabel}**`, line("Everyone", all)];
+  if (devText) out.push(devText);
+  out.push("");
   rows.slice(0, USAGE_REPORT_MAX_ROWS).forEach((r, i) => {
     out.push(`${i + 1}. ${line(r.name, r.counts)}`);
   });
@@ -76,6 +108,11 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const period = interaction.options.getString("period") ?? "30";
   const days = period === "all" ? undefined : parseInt(period, 10);
   const { since, rows } = await UsageStore.getInstance().report(days);
+  const devSince =
+    days === undefined
+      ? undefined
+      : new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const dev = devTotals(await fetchDevRows(), devSince);
   const label =
     days === undefined
       ? `all time (since ${since.slice(0, 10)})`
@@ -83,7 +120,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         ? "Today (UTC)"
         : `Last ${days} days`;
   await interaction.reply({
-    content: formatReport(label, rows, interaction.user.id).slice(0, 2000),
+    content: formatReport(label, rows, interaction.user.id, dev).slice(0, 2000),
     ephemeral: true,
   });
 }
