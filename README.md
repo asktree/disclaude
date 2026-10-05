@@ -43,7 +43,7 @@ Discord no longer renders X links well, so the bot expands them itself using the
 
 ## Developer Requests
 
-When someone wishes the bot could do something it can't, or reports a bug, Claude can file it with `request_developer` instead of just saying no. Requests go to [Ledger](https://github.com/asktree/iggymanager/tree/claude/pensive-dirac-z9mk38/projects/ledger), the owner's work tracker, assigned to the agent that builds the bot. The tool only exists when `LEDGER_URL` and `LEDGER_TOKEN` are set, so forks without Ledger are unaffected.
+When someone wishes the bot could do something it can't, or reports a bug, Claude can file it with `request_developer` instead of just saying no. Requests go to Ledger, the owner's work tracker, assigned to the agent that builds the bot. The tool only exists when `LEDGER_URL` and `LEDGER_TOKEN` are set, so forks without Ledger are unaffected.
 
 - Each person can file up to 5 requests an hour.
 - `LEDGER_GUILD_IDS` (comma-separated server IDs) limits filing to those servers; empty means every server the bot is in.
