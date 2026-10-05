@@ -25,6 +25,7 @@ A Discord bot that brings Claude AI into your Discord server! When someone menti
 | `find_discord_user` | Look up a member by nickname, display name, username, or ID |
 | `fetch_url` | Fetch and read a web page |
 | `read_source_code` | Read the bot's own source |
+| `request_developer` | File a feature request or bug report for the bot's developer (only when Ledger is configured, see below) |
 
 **Note on search:** Discord's guild message search endpoint opened to bots in August 2025 and is still marked as a preview by Discord. The bot needs the **Read Message History** permission in the channels it searches. If a server's search index is still warming up, Discord returns a "not ready" response and the bot retries a couple of times before giving up.
 
@@ -39,6 +40,14 @@ Discord no longer renders X links well, so the bot expands them itself using the
 - The bot needs **Embed Links**, and **Manage Messages** so it can hide the broken X preview on the original message (only done when the message contains nothing but tweet links; without the permission the X preview stays).
 - Posts in another language get a translation underneath, like X's "Translate post". `TWEET_TRANSLATE_TO` sets the target language (default `en`; set it to an empty string to disable). Quoted posts are not translated.
 - Set `TWEET_EMBEDS=false` to turn the feature off.
+
+## Developer Requests
+
+When someone wishes the bot could do something it can't, or reports a bug, Claude can file it with `request_developer` instead of just saying no. Requests go to Ledger, the owner's work tracker, assigned to the agent that builds the bot. The tool only exists when `LEDGER_URL` and `LEDGER_TOKEN` are set, so forks without Ledger are unaffected.
+
+- Each person can file up to 5 requests an hour.
+- `LEDGER_GUILD_IDS` (comma-separated server IDs) limits filing to those servers; empty means every server the bot is in.
+- The ticket records who asked, the server, and a link to the message, and is marked as text from Discord to weigh rather than follow.
 
 ## Prerequisites
 
@@ -115,6 +124,11 @@ pnpm start
 | `MAX_CONTEXT_MESSAGES` | Number of messages to include as context | `20` |
 | `FOLLOW_UP_TIMEOUT_MS` | How long to monitor for follow-ups (ms) | `30000` |
 | `FOLLOW_UP_MESSAGE_COUNT` | Max follow-up responses | `3` |
+| `LEDGER_URL` | Ledger base URL; turns on developer requests together with `LEDGER_TOKEN` | unset |
+| `LEDGER_TOKEN` | Ledger bearer token (16+ letters and digits) | unset |
+| `LEDGER_DEVELOPER` | Ledger agent the requests are assigned to | `computer-buddy` |
+| `LEDGER_PROJECT` | Ledger project for the requests | `Computer Buddy` |
+| `LEDGER_GUILD_IDS` | Servers allowed to file requests (comma-separated IDs) | every server |
 
 ## Deployment Options
 

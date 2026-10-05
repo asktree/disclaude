@@ -34,6 +34,12 @@ export const CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const MAX_TOOL_ROUNDS = 5;
 export const TOOL_STATUS_MESSAGE_DELAY_MS = 1000;
 
+// Developer requests (Ledger)
+export const LEDGER_TIMEOUT_MS = 15000;
+export const DEV_REQUEST_LIMIT_PER_HOUR = 5;
+export const DEFAULT_LEDGER_DEVELOPER = "computer-buddy";
+export const DEFAULT_LEDGER_PROJECT = "Computer Buddy";
+
 // Git Integration
 export const GIT_STARTUP_CHANNEL_NAME = "computer-buddy-zone";
 export const GIT_DIFF_LINES_PER_FILE = 100;
