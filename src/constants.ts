@@ -44,6 +44,8 @@ export const DEFAULT_LEDGER_PROJECT = "Computer Buddy";
 export const USAGE_DAYS_KEPT = 90;
 export const USAGE_SAVE_DELAY_MS = 5000;
 export const USAGE_REPORT_MAX_ROWS = 15;
+// Calls recorded before costs were kept ran on this model (live from 2026-10-05 06:58Z)
+export const USAGE_LEGACY_MODEL = "claude-opus-5-5";
 
 // Git Integration
 export const GIT_STARTUP_CHANNEL_NAME = "computer-buddy-zone";
