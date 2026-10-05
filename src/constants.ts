@@ -46,6 +46,10 @@ export const USAGE_SAVE_DELAY_MS = 5000;
 export const USAGE_REPORT_MAX_ROWS = 15;
 // Calls recorded before costs were kept ran on this model (live from 2026-10-05 06:58Z)
 export const USAGE_LEGACY_MODEL = "claude-opus-5-5";
+// Token use of the Claude Code sessions that develop the bot (written by scripts/dev-usage.ts)
+export const DEV_USAGE_LOG_URL =
+  "https://raw.githubusercontent.com/asktree/disclaude/main/dev-usage/log.jsonl";
+export const DEV_USAGE_CACHE_MS = 5 * 60 * 1000;
 
 // Git Integration
 export const GIT_STARTUP_CHANNEL_NAME = "computer-buddy-zone";
