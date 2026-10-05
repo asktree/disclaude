@@ -40,6 +40,11 @@ export const DEV_REQUEST_LIMIT_PER_HOUR = 5;
 export const DEFAULT_LEDGER_DEVELOPER = "computer-buddy";
 export const DEFAULT_LEDGER_PROJECT = "Computer Buddy";
 
+// Token usage tracking
+export const USAGE_DAYS_KEPT = 90;
+export const USAGE_SAVE_DELAY_MS = 5000;
+export const USAGE_REPORT_MAX_ROWS = 15;
+
 // Git Integration
 export const GIT_STARTUP_CHANNEL_NAME = "computer-buddy-zone";
 export const GIT_DIFF_LINES_PER_FILE = 100;

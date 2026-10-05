@@ -33,6 +33,7 @@ import {
   RequestDeveloperHandler,
 } from "../tools";
 import { ledgerFromConfig } from "../services/ledger";
+import { usageContext } from "../services/usageStore";
 import { ToolCall, ToolContext } from "../types/tool.types";
 import { createErrorAttachment } from "../utils/errorFormatter";
 
@@ -81,6 +82,12 @@ export class MessageHandler {
   }
 
   async handleMessage(message: Message): Promise<void> {
+    // Every Claude call made while answering counts against the person who asked
+    const name = message.member?.displayName ?? message.author.displayName;
+    return usageContext.run({ userId: message.author.id, name }, () => this.answerMessage(message));
+  }
+
+  private async answerMessage(message: Message): Promise<void> {
     // Ignore bot's own messages
     if (message.author.id === this.botId) {
       return;
