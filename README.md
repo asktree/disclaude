@@ -201,7 +201,10 @@ pm2 startup
 
 ## Bot Commands
 
-Currently, the bot responds to @mentions only. Slash commands can be added in future versions.
+- `/setinfo`: set your pronouns and a short bio that the bot sees.
+- `/usage`: show how many Claude tokens each person used (today, last 7 days, last 30 days or all time). Only you see the reply.
+
+The bot counts the tokens of every Claude call it makes to answer a mention against the person who mentioned it. The counts are kept in `token-usage.json` in the data directory (`/data` on Railway), with daily totals for the last 90 days.
 
 ## Development
 

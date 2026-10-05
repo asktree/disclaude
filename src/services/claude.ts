@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { usageContext, UsageStore, countsFromApiUsage } from "./usageStore";
 import { config } from "../config";
 import { Message } from "discord.js";
 import { buildDiscordMessageRepresentation } from "../utils/messageFormatter";
@@ -286,6 +287,12 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         })) as Anthropic.MessageParam[],
         betas,
       });
+
+      // Count the tokens against the person this reply is for
+      const requester = usageContext.getStore();
+      if (requester) {
+        void UsageStore.getInstance().record(requester, countsFromApiUsage(response.usage));
+      }
 
       // Safety classifiers can decline a request with a normal 200 and no usable content
       if (response.stop_reason === "refusal") {
