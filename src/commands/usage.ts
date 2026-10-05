@@ -4,7 +4,7 @@ import { USAGE_REPORT_MAX_ROWS } from "../constants";
 
 export const data = new SlashCommandBuilder()
   .setName("usage")
-  .setDescription("Show how many Claude tokens each person used")
+  .setDescription("Show the Claude tokens and dollar cost for each person")
   .addStringOption((option) =>
     option
       .setName("period")
@@ -23,10 +23,15 @@ function fmt(n: number): string {
   return String(n);
 }
 
+function money(c: UsageCounts): string {
+  const usd = c.costUsd < 0.01 && c.costUsd > 0 ? "<$0.01" : `$${c.costUsd.toFixed(2)}`;
+  return c.costEstimated ? `~${usd}` : usd;
+}
+
 function line(label: string, c: UsageCounts): string {
   const input = c.inputTokens + c.cacheReadTokens + c.cacheWriteTokens;
   const searches = c.webSearches > 0 ? `, ${c.webSearches} web searches` : "";
-  return `**${label}**: ${fmt(totalTokens(c))} tokens (${fmt(input)} in, ${fmt(c.outputTokens)} out), ${c.requests} ${c.requests === 1 ? "call" : "calls"}${searches}`;
+  return `**${label}**: ${money(c)}, ${fmt(totalTokens(c))} tokens (${fmt(input)} in, ${fmt(c.outputTokens)} out), ${c.requests} ${c.requests === 1 ? "call" : "calls"}${searches}`;
 }
 
 /** Builds the report text. Exported for tests. */
@@ -38,7 +43,18 @@ export function formatReport(
   if (rows.length === 0) return `No token use recorded for ${periodLabel.toLowerCase()}.`;
   const all = emptyCounts();
   for (const r of rows) {
-    for (const k of Object.keys(all) as (keyof UsageCounts)[]) all[k] += r.counts[k];
+    for (const k of [
+      "requests",
+      "inputTokens",
+      "outputTokens",
+      "cacheReadTokens",
+      "cacheWriteTokens",
+      "webSearches",
+      "costUsd",
+    ] as const) {
+      all[k] += r.counts[k];
+    }
+    if (r.counts.costEstimated) all.costEstimated = true;
   }
   const out = [`📊 **Claude token use: ${periodLabel}**`, line("Everyone", all), ""];
   rows.slice(0, USAGE_REPORT_MAX_ROWS).forEach((r, i) => {
@@ -49,6 +65,9 @@ export function formatReport(
     out.push("…", `${viewerIndex + 1}. ${line(rows[viewerIndex].name, rows[viewerIndex].counts)}`);
   } else if (rows.length > USAGE_REPORT_MAX_ROWS) {
     out.push(`…and ${rows.length - USAGE_REPORT_MAX_ROWS} more.`);
+  }
+  if (rows.some((r) => r.counts.costEstimated)) {
+    out.push("", "~ means the cost is an estimate (calls from before the bot kept costs).");
   }
   return out.join("\n");
 }
