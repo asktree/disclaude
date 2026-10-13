@@ -14,6 +14,8 @@ export const config = {
   discord: {
     token: process.env.DISCORD_BOT_TOKEN!,
     clientId: process.env.DISCORD_CLIENT_ID!,
+    // HTTP proxy (http://user:pass@host:port) used only after Cloudflare bans this IP (error 1015)
+    proxy: process.env.DISCORD_PROXY || "",
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY!,

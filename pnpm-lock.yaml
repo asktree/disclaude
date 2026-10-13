@@ -23,6 +23,9 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      undici:
+        specifier: ^6.21.3
+        version: 6.21.3
     devDependencies:
       '@types/node':
         specifier: ^24.8.1

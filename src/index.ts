@@ -15,11 +15,14 @@ import { TweetEmbedHandler } from "./handlers/tweetHandler";
 import { getLatestCommitInfo, generateCommitSummary } from "./utils/gitInfo";
 import { commands, getCommandsJSON } from "./commands";
 import { UserInfoStore } from "./services/userInfoStore";
+import { checkIpBan, enableProxy, isIpBan, proxyActive } from "./utils/discordProxy";
 
 class DisclaudeBot {
   private client: Client;
   private messageHandler: MessageHandler | null = null;
   private tweetHandler: TweetEmbedHandler | null = null;
+  private proxyAgent: Awaited<ReturnType<typeof enableProxy>> | null = null;
+  private switching: Promise<boolean> | null = null;
 
   constructor() {
     this.client = new Client({
@@ -101,7 +104,46 @@ class DisclaudeBot {
     }
   }
 
+  /** Send Discord traffic through DISCORD_PROXY after a Cloudflare IP ban (error 1015). */
+  private switchToProxy(): Promise<boolean> {
+    if (!this.switching) {
+      this.switching = this.doSwitchToProxy().finally(() => {
+        this.switching = null;
+      });
+    }
+    return this.switching;
+  }
+
+  private async doSwitchToProxy(): Promise<boolean> {
+    if (proxyActive()) return true;
+    if (!config.discord.proxy) {
+      console.error("⛔ Discord banned this IP (Cloudflare 1015) and DISCORD_PROXY is not set");
+      return false;
+    }
+    console.warn("⛔ Discord banned this IP (Cloudflare 1015); connecting through the proxy");
+    try {
+      this.proxyAgent = await enableProxy(config.discord.proxy);
+      this.client.rest.setAgent(this.proxyAgent);
+      console.log("🔀 Discord traffic now goes through the proxy");
+      return true;
+    } catch (error) {
+      console.error("❌ Could not reach the Discord proxy:", error);
+      return false;
+    }
+  }
+
   private setupEventHandlers(): void {
+    // A ban can also start while the bot runs. Switch REST and the next gateway connection.
+    this.client.rest.on("response", (_request, response) => {
+      if (
+        !proxyActive() &&
+        config.discord.proxy &&
+        isIpBan(response.status, response.headers.get("content-type"))
+      ) {
+        void this.switchToProxy();
+      }
+    });
+
     this.client.once(Events.ClientReady, async (readyClient) => {
       console.log(`✅ Logged in as ${readyClient.user.tag}!`);
       console.log(`🤖 Bot ID: ${readyClient.user.id}`);
@@ -235,6 +277,7 @@ class DisclaudeBot {
 
   private async registerCommands(): Promise<void> {
     const rest = new REST().setToken(config.discord.token);
+    if (this.proxyAgent) rest.setAgent(this.proxyAgent);
 
     try {
       console.log("🔄 Registering slash commands...");
@@ -267,10 +310,18 @@ class DisclaudeBot {
       console.log(`💬 Max context messages: ${config.bot.maxContextMessages}`);
       console.log(`🧠 Memory enabled: ${config.memory.enabled ? "Yes" : "No"}`);
 
+      // Connect directly first. Use the proxy only when Discord bans this IP.
+      if (await checkIpBan()) await this.switchToProxy();
+
       // Register slash commands
       await this.registerCommands();
 
-      await this.client.login(config.discord.token);
+      try {
+        await this.client.login(config.discord.token);
+      } catch (error) {
+        if (proxyActive() || !(await checkIpBan()) || !(await this.switchToProxy())) throw error;
+        await this.client.login(config.discord.token);
+      }
     } catch (error) {
       console.error("Failed to start bot:", error);
       process.exit(1);
