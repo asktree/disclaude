@@ -12,6 +12,7 @@ import {
   MIN_PRESERVED_MESSAGES,
   DISCORD_MAX_MESSAGE_LENGTH,
   MAX_RECENT_MESSAGES_FOR_URL_SEARCH,
+  TWEET_REMOVAL_HINT,
 } from "../constants";
 import {
   ClaudeMessage,
@@ -87,6 +88,21 @@ export class MessageHandler {
     return usageContext.run({ userId: message.author.id, name }, () => this.answerMessage(message));
   }
 
+  /**
+   * True when the message replies to one of the bot's tweet embeds and does not
+   * @mention the bot in its text. Discord counts such a reply as a mention of the bot.
+   */
+  private async isReplyToEmbed(message: Message): Promise<boolean> {
+    if (!message.reference?.messageId) return false;
+    if (new RegExp(`<@!?${this.botId}>`).test(message.content)) return false;
+    const replied = await message.fetchReference().catch(() => null);
+    return (
+      replied !== null &&
+      replied.author.id === this.botId &&
+      replied.content.includes(TWEET_REMOVAL_HINT)
+    );
+  }
+
   private async answerMessage(message: Message): Promise<void> {
     // Ignore bot's own messages
     if (message.author.id === this.botId) {
@@ -97,6 +113,11 @@ export class MessageHandler {
 
     // Only respond if mentioned
     if (!isMentioned) {
+      return;
+    }
+
+    // A reply to a tweet embed is talk about the tweet, not a request to the bot
+    if (await this.isReplyToEmbed(message)) {
       return;
     }
 
