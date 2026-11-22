@@ -62,7 +62,11 @@ export const TOOL_USE_OVERHEAD_TOKENS = 10;
 // Claude Models and Generation
 export const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
 export const COMMIT_SUMMARY_MODEL = "claude-haiku-4-5"; // Cheap model for startup commit summaries
-export const CLAUDE_MAX_OUTPUT_TOKENS = 8192; // Caps thinking + visible reply together
+export const CLAUDE_MAX_OUTPUT_TOKENS = 16000; // Caps thinking + visible reply together
+// When a reply has no text (thinking used the whole budget, or pause_turn), retry this many times
+export const CLAUDE_EMPTY_REPLY_RETRIES = 2;
+// Budget for that retry. Keep at or under ~21000: larger non-streaming requests are refused by the SDK
+export const CLAUDE_RECOVERY_MAX_OUTPUT_TOKENS = 20000;
 export const CLAUDE_EFFORT = "medium" as const; // low | medium | high | xhigh | max
 
 // API Retry Configuration
