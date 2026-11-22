@@ -10,6 +10,8 @@ import {
   MAX_IMAGE_SIZE_MB,
   CLAUDE_MAX_OUTPUT_TOKENS,
   CLAUDE_EFFORT,
+  CLAUDE_EMPTY_REPLY_RETRIES,
+  CLAUDE_RECOVERY_MAX_OUTPUT_TOKENS,
 } from "../constants";
 import { ClaudeResponse, ToolDefinition, ClaudeCodeExecutionResult } from "../types";
 import { formatCodeExecutionResult, formatCitations } from "../utils/responseFormatter";
@@ -36,6 +38,9 @@ export class ClaudeService {
     enableTools: boolean = false,
     retryCount: number = 0,
     customToolDefinitions?: ToolDefinition[],
+    recovery: { attempt: number; maxTokens?: number; effort?: typeof CLAUDE_EFFORT | "low" } = {
+      attempt: 0,
+    },
   ): Promise<ClaudeResponse> {
     try {
       console.log(
@@ -260,7 +265,10 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       // max_tokens caps thinking plus the visible reply together, so it is larger
       // than the old 2000 either way.
       const thinkingParams = supportsAdaptiveThinking(modelId)
-        ? { thinking: { type: "adaptive" as const }, output_config: { effort: CLAUDE_EFFORT } }
+        ? {
+            thinking: { type: "adaptive" as const },
+            output_config: { effort: recovery.effort ?? CLAUDE_EFFORT },
+          }
         : {};
 
       // "default" lets Anthropic pick a fallback model if the primary model's
@@ -276,7 +284,7 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
       // Use beta API for memory support
       const response = await this.anthropic.beta.messages.create({
         model: modelId,
-        max_tokens: CLAUDE_MAX_OUTPUT_TOKENS,
+        max_tokens: recovery.maxTokens ?? CLAUDE_MAX_OUTPUT_TOKENS,
         ...thinkingParams,
         ...fallbackParams,
         system: fullSystemPrompt,
@@ -470,7 +478,39 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
         };
       }
 
-      return textContent || "I couldn't generate a response.";
+      if (textContent) return textContent;
+
+      // No text came back (IGG-2397). Thinking can use all of max_tokens, or the server
+      // can pause a long turn of its own tools. Try to get a real answer before giving up.
+      const stopReason = response.stop_reason as string | null;
+      console.warn(
+        `⚠️ Claude returned no text (stop_reason: ${stopReason}, attempt ${recovery.attempt})`,
+      );
+      if (recovery.attempt < CLAUDE_EMPTY_REPLY_RETRIES) {
+        const nextRecovery = { ...recovery, attempt: recovery.attempt + 1 };
+        let nextMessages = messages;
+        if (stopReason === "pause_turn") {
+          // Send the paused turn back so the server can continue it
+          nextMessages = [...messages, { role: "assistant", content: response.content }];
+        } else {
+          // Give thinking more room and ask it to think less
+          nextRecovery.maxTokens = CLAUDE_RECOVERY_MAX_OUTPUT_TOKENS;
+          nextRecovery.effort = "low";
+        }
+        return this.generateResponse(
+          nextMessages,
+          systemPrompt,
+          additionalContext,
+          model,
+          enableTools,
+          retryCount,
+          customToolDefinitions,
+          nextRecovery,
+        );
+      }
+      return stopReason === "max_tokens"
+        ? "Sorry, I thought about this for too long and ran out of room before I could answer. Try a narrower question."
+        : `Sorry, I couldn't generate a response (stop reason: ${stopReason ?? "unknown"}). Please try again.`;
     } catch (error: any) {
       // Check if it's a retryable error (500, 502, 503, 529)
       const isRetryable = error?.status && [500, 502, 503, 529].includes(error.status);
@@ -498,6 +538,8 @@ You're built with TypeScript, Discord.js, and the Anthropic SDK. Your source cod
           model,
           enableTools,
           retryCount + 1,
+          customToolDefinitions,
+          recovery,
         );
       }
 
